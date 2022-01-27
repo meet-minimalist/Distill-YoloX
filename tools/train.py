@@ -10,6 +10,9 @@ from loguru import logger
 import torch
 import torch.backends.cudnn as cudnn
 
+import sys, os
+sys.path.append(os.path.abspath("../"))
+# sys.path.append("D:/M.Tech/Sem-4/Thesis data/Implementation/Distill-YoloX")
 from yolox.core import Trainer, launch
 from yolox.exp import get_exp
 from yolox.utils import configure_nccl, configure_omp, get_num_devices
