@@ -67,7 +67,8 @@ class COCODataset(Dataset):
         cats = self.coco.loadCats(self.coco.getCatIds())
         self._classes = tuple([c["name"] for c in cats])
         self.imgs = None
-        self.name = name
+        # self.name = name
+        self.name = os.path.basename(json_file).split('_')[1].split('.')[0]
         self.img_size = img_size
         self.preproc = preproc
         self.annotations = self._load_coco_annotations()
@@ -189,6 +190,7 @@ class COCODataset(Dataset):
 
         img_file = os.path.join(self.data_dir, self.name, file_name)
 
+        assert os.path.isfile(img_file), f"{img_file} not found."
         img = cv2.imread(img_file)
         assert img is not None
 

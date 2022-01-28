@@ -13,7 +13,7 @@ import torch.backends.cudnn as cudnn
 import sys, os
 sys.path.append(os.path.abspath("./"))
 # sys.path.append("D:/M.Tech/Sem-4/Thesis data/Implementation/Distill-YoloX")
-from yolox.core import Trainer, launch
+from yolox.core import TrainerDistill, launch
 from yolox.exp import get_exp
 from yolox.utils import configure_nccl, configure_omp, get_num_devices
 
@@ -21,7 +21,8 @@ from yolox.utils import configure_nccl, configure_omp, get_num_devices
 def make_parser():
     parser = argparse.ArgumentParser("YOLOX train parser")
     parser.add_argument("-expn", "--experiment-name", type=str, default=None)
-    parser.add_argument("-n", "--name", type=str, default=None, help="model name")
+    parser.add_argument("-ns", "--student-name", type=str, default=None, help="Student model name")
+    parser.add_argument("-nt", "--teacher-name", type=str, default=None, help="Teacher model name")
 
     # distributed
     parser.add_argument(
@@ -38,16 +39,24 @@ def make_parser():
         "-d", "--devices", default=None, type=int, help="device for training"
     )
     parser.add_argument(
-        "-f",
-        "--exp_file",
+        "-fs",
+        "--student-exp-file",
         default=None,
         type=str,
-        help="plz input your experiment description file",
+        help="plz input your experiment description file for student",
+    )
+    parser.add_argument(
+        "-ft",
+        "--teacher-exp-file",
+        default=None,
+        type=str,
+        help="plz input your experiment description file for teacher",
     )
     parser.add_argument(
         "--resume", default=False, action="store_true", help="resume training"
     )
-    parser.add_argument("-c", "--ckpt", default=None, type=str, help="checkpoint file")
+    parser.add_argument("-tc", "--student-ckpt", default=None, type=str, help="checkpoint file")
+    parser.add_argument("-c", "--teacher-ckpt", default=None, type=str, help="Teacher checkpoint file")
     parser.add_argument(
         "-e",
         "--start_epoch",
@@ -93,10 +102,10 @@ def make_parser():
 
 
 @logger.catch
-def main(exp, args):
-    if exp.seed is not None:
-        random.seed(exp.seed)
-        torch.manual_seed(exp.seed)
+def main(student_exp, teacher_exp, args):
+    if student_exp.seed is not None:
+        random.seed(student_exp.seed)
+        torch.manual_seed(student_exp.seed)
         cudnn.deterministic = True
         warnings.warn(
             "You have chosen to seed training. This will turn on the CUDNN deterministic setting, "
@@ -109,17 +118,18 @@ def main(exp, args):
     configure_omp()
     cudnn.benchmark = True
 
-    trainer = Trainer(exp, args)
+    trainer = TrainerDistill(student_exp, teacher_exp, args)
     trainer.train()
 
 
 if __name__ == "__main__":
     args = make_parser().parse_args()
-    exp = get_exp(args.exp_file, args.name)
-    exp.merge(args.opts)
+    student_exp = get_exp(args.student_exp_file, args.student_name)
+    teacher_exp = get_exp(args.teacher_exp_file, args.teacher_name)
+    student_exp.merge(args.opts)    # TODO : Dont allow this flexibility
 
     if not args.experiment_name:
-        args.experiment_name = exp.exp_name
+        args.experiment_name = student_exp.exp_name
 
     num_gpu = get_num_devices() if args.devices is None else args.devices
     assert num_gpu <= get_num_devices()
@@ -132,5 +142,5 @@ if __name__ == "__main__":
         args.machine_rank,
         backend=args.dist_backend,
         dist_url=dist_url,
-        args=(exp, args),
+        args=(student_exp, teacher_exp, args),
     )

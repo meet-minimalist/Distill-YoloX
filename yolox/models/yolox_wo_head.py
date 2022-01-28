@@ -15,15 +15,15 @@ class YOLOX(nn.Module):
     and detection results during test.
     """
 
-    def __init__(self, backbone=None, head=None):
+    def __init__(self, backbone=None):
         super().__init__()
         if backbone is None:
             backbone = YOLOPAFPN()
-        if head is None:
-            head = YOLOXHead(80)
+        # if head is None:
+        #     head = YOLOXHead(80)
 
         self.backbone = backbone
-        self.head = head
+        # self.head = head
 
     def forward(self, x, targets=None):
         # fpn output content features of [dark3, dark4, dark5]
@@ -32,20 +32,21 @@ class YOLOX(nn.Module):
         # fpn_outs[1] : [1, 256, 40, 40]
         # fpn_outs[2] : [1, 512, 20, 20]
 
-        if self.training:
-            assert targets is not None
-            loss, iou_loss, conf_loss, cls_loss, l1_loss, num_fg = self.head(
-                fpn_outs, targets, x
-            )
-            outputs = {
-                "total_loss": loss,
-                "iou_loss": iou_loss,
-                "l1_loss": l1_loss,
-                "conf_loss": conf_loss,
-                "cls_loss": cls_loss,
-                "num_fg": num_fg,
-            }
-        else:
-            outputs = self.head(fpn_outs)
+        return fpn_outs
+        # if self.training:
+        #     assert targets is not None
+        #     loss, iou_loss, conf_loss, cls_loss, l1_loss, num_fg = self.head(
+        #         fpn_outs, targets, x
+        #     )
+        #     outputs = {
+        #         "total_loss": loss,
+        #         "iou_loss": iou_loss,
+        #         "l1_loss": l1_loss,
+        #         "conf_loss": conf_loss,
+        #         "cls_loss": cls_loss,
+        #         "num_fg": num_fg,
+        #     }
+        # else:
+        #     outputs = self.head(fpn_outs)
 
-        return outputs
+        # return outputs

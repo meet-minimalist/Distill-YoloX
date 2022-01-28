@@ -45,7 +45,8 @@ class Trainer:
         self.is_distributed = get_world_size() > 1
         self.rank = get_rank()
         self.local_rank = get_local_rank()
-        self.device = "cuda:{}".format(self.local_rank)
+        self.student_device = "cuda:{}".format(self.local_rank)
+        self.teacher_device = "cpu"
         self.use_model_ema = student_exp.ema
 
         # data/dataloader related attr
@@ -126,7 +127,8 @@ class Trainer:
 
     def before_train(self):
         logger.info("args: {}".format(self.args))
-        logger.info("exp value:\n{}".format(self.exp))
+        logger.info("Student exp value:\n{}".format(self.student_exp))
+        logger.info("Teacher exp value:\n{}".format(self.teacher_exp))
 
         # model related init
         torch.cuda.set_device(self.local_rank)
@@ -134,20 +136,24 @@ class Trainer:
         teacher_model = self.teacher_exp.get_model()
         logger.info(
             "Student Model Summary: {}".format(
-                get_model_info(student_model, self.exp.test_size))
+                get_model_info(student_model, self.student_exp.test_size))
         )
         logger.info(
             "Teacher Model Summary: {}".format(
-                get_model_info(teacher_model, self.exp.test_size))
+                get_model_info(teacher_model, self.teacher_exp.test_size))
         )
-        student_model.to(self.device)
-        teacher_model.to(self.device)
+        student_model.to(self.student_device)
+        teacher_model.to(self.teacher_device)
 
         # solver related init
         self.optimizer = self.student_exp.get_optimizer(self.args.batch_size)
 
+        # Restore teacher checkpoint
+        teacher_model = self.load_teacher(teacher_model)
+
         # value of epoch will be set in `resume_train`
-        model = self.resume_train(student_model)
+        # Call this method only for student model only
+        student_model = self.resume_student_train(student_model)
 
         # data related init
         self.no_aug = self.start_epoch >= self.max_epoch - self.student_exp.no_aug_epochs
@@ -162,17 +168,20 @@ class Trainer:
         # max_iter means iters per epoch
         self.max_iter = len(self.train_loader)
 
-        self.lr_scheduler = self.exp.get_lr_scheduler(
-            self.exp.basic_lr_per_img * self.args.batch_size, self.max_iter
+        self.lr_scheduler = self.student_exp.get_lr_scheduler(
+            self.student_exp.basic_lr_per_img * self.args.batch_size, self.max_iter
         )
         if self.args.occupy:
             occupy_mem(self.local_rank)
 
-        if self.is_distributed:
-            model = DDP(model, device_ids=[self.local_rank], broadcast_buffers=False)
+        assert not self.is_distributed, "Distributed training is not supported."
+        # if self.is_distributed:
+        #     model = DDP(model, device_ids=[self.local_rank], broadcast_buffers=False)
 
+        print("Model loaded successfully")
+        exit()
         if self.use_model_ema:
-            self.ema_model = ModelEMA(model, 0.9998)
+            self.ema_model = ModelEMA(student_model, 0.9998)
             self.ema_model.updates = self.max_iter * self.start_epoch
 
         self.model = model
@@ -266,15 +275,24 @@ class Trainer:
     def progress_in_iter(self):
         return self.epoch * self.max_iter + self.iter
 
-    def resume_train(self, model):
+
+    def load_teacher(self, model):
+        logger.info("loading checkpoint for teacher")
+        ckpt_file = self.args.teacher_ckpt
+        ckpt = torch.load(ckpt_file, map_location=self.teacher_device)["model"]
+        model = load_ckpt(model, ckpt)
+        return model
+
+    def resume_student_train(self, model):
         if self.args.resume:
+            # Resume the student network training
             logger.info("resume training")
-            if self.args.ckpt is None:
+            if self.args.student_ckpt is None:
                 ckpt_file = os.path.join(self.file_name, "latest" + "_ckpt.pth")
             else:
-                ckpt_file = self.args.ckpt
+                ckpt_file = self.args.student_ckpt
 
-            ckpt = torch.load(ckpt_file, map_location=self.device)
+            ckpt = torch.load(ckpt_file, map_location=self.student_device)
             # resume the model/optimizer state dict
             model.load_state_dict(ckpt["model"])
             self.optimizer.load_state_dict(ckpt["optimizer"])
@@ -291,12 +309,16 @@ class Trainer:
                 )
             )  # noqa
         else:
-            if self.args.ckpt is not None:
+            # This should not be called as we want to train student from
+            # scratch using knowledge distillation
+            self.start_epoch = 0
+            return model
+            assert False, "Student weights should not be restored if we are not resuming the training."
+            if self.args.student_ckpt is not None:
                 logger.info("loading checkpoint for fine tuning")
                 ckpt_file = self.args.ckpt
                 ckpt = torch.load(ckpt_file, map_location=self.device)["model"]
                 model = load_ckpt(model, ckpt)
-            self.start_epoch = 0
 
         return model
 
