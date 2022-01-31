@@ -53,6 +53,7 @@ class Trainer:
         self.data_type = torch.float16 if args.fp16 else torch.float32
         self.student_input_size = student_exp.input_size
         self.teacher_input_size = teacher_exp.input_size
+        assert self.student_input_size == self.teacher_input_size, "The input resolution of student and teacher should be same so as to match the final feature maps and compare the values in loss."
         self.best_ap = 0
 
         # metric record
@@ -68,6 +69,12 @@ class Trainer:
             filename="train_log.txt",
             mode="a",
         )
+
+        from yolox.models import YoloXLoss
+        self.yolox_loss = YoloXLoss(kd_loss=True, \
+                            temperature=self.student_exp.temperature, \
+                            kd_cls_weight=self.student_exp.kd_cls_weight, \
+                            kd_hint_weight=self.student_exp.kd_hint_weight)
 
     def train(self):
         self.before_train()
@@ -90,19 +97,46 @@ class Trainer:
             self.train_one_iter()
             self.after_iter()
 
+            print("One iteration completed......")
+            exit()
+
     def train_one_iter(self):
         iter_start_time = time.time()
 
         inps, targets = self.prefetcher.next()
+        # print(self.data_type)
+        # exit()
         inps = inps.to(self.data_type)
         targets = targets.to(self.data_type)
         targets.requires_grad = False
-        inps, targets = self.student_exp.preprocess(inps, targets, self.input_size)
+        inps, targets = self.student_exp.preprocess(inps, targets, self.student_input_size)
         data_end_time = time.time()
 
         with torch.cuda.amp.autocast(enabled=self.amp_training):
-            outputs = self.model(inps, targets)
+            student_output_fmaps = self.student_model(inps, targets)
+        
+        teacher_output_fmaps = self.teacher_model(inps.to(self.teacher_device).to(torch.float32), \
+                                                  targets.to(self.teacher_device).to(torch.float32) )
 
+        # for s, t in zip(student_output_fmaps, teacher_output_fmaps):
+        #     print(s.shape)
+        #     print(t.shape)
+        #     print("==="*30)
+
+        loss_total, loss_iou, loss_obj, loss_cls, loss_cls_kd, loss_l1, loss_kd_hint, num_fg = \
+            self.yolox_loss([student_output_fmaps, teacher_output_fmaps], targets)
+        outputs = {
+            "total_loss": loss_total,
+            "iou_loss": loss_iou,
+            "l1_loss": loss_l1,
+            "conf_loss": loss_obj,
+            "cls_loss": loss_cls,
+            "kd_cls_loss": loss_cls_kd,
+            "kd_hint_loss": loss_kd_hint,
+            "num_fg": num_fg,
+        }
+        # exit()
+        
         loss = outputs["total_loss"]
 
         self.optimizer.zero_grad()
@@ -178,16 +212,16 @@ class Trainer:
         # if self.is_distributed:
         #     model = DDP(model, device_ids=[self.local_rank], broadcast_buffers=False)
 
-        print("Model loaded successfully")
-        exit()
         if self.use_model_ema:
             self.ema_model = ModelEMA(student_model, 0.9998)
             self.ema_model.updates = self.max_iter * self.start_epoch
 
-        self.model = model
-        self.model.train()
+        self.student_model = student_model
+        self.student_model.train()
+        self.teacher_model = teacher_model
+        self.teacher_model.eval()       # We dont want to train teacher model
 
-        self.evaluator = self.exp.get_evaluator(
+        self.evaluator = self.student_exp.get_evaluator(
             batch_size=self.args.batch_size, is_distributed=self.is_distributed
         )
         # Tensorboard logger
@@ -195,7 +229,7 @@ class Trainer:
             self.tblogger = SummaryWriter(self.file_name)
 
         logger.info("Training start...")
-        logger.info("\n{}".format(model))
+        logger.info("\n{}".format(student_model))
 
     def after_train(self):
         logger.info(
@@ -205,7 +239,7 @@ class Trainer:
     def before_epoch(self):
         logger.info("---> start train epoch{}".format(self.epoch + 1))
 
-        if self.epoch + 1 == self.max_epoch - self.exp.no_aug_epochs or self.no_aug:
+        if self.epoch + 1 == self.max_epoch - self.student_exp.no_aug_epochs or self.no_aug:
             logger.info("--->No mosaic aug now!")
             self.train_loader.close_mosaic()
             logger.info("--->Add additional L1 loss now!")
@@ -213,7 +247,7 @@ class Trainer:
                 self.model.module.head.use_l1 = True
             else:
                 self.model.head.use_l1 = True
-            self.exp.eval_interval = 1
+            self.student_exp.eval_interval = 1
             if not self.no_aug:
                 self.save_ckpt(ckpt_name="last_mosaic_epoch")
 
