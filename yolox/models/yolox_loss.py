@@ -12,7 +12,9 @@ from .losses import IOUloss
 
 
 class YoloXLoss(nn.Module):
-    def __init__(self, kd_loss=True, temperature=1.0, kd_cls_weight=0.5, kd_hint_weight=0.5, strides=[8, 16, 32]):
+    def __init__(self, kd_loss=True, temperature=1.0, kd_cls_weight=0.5, kd_hint_weight=0.5, \
+                        pos_cls_weight=1.0, neg_cls_weight=1.5, \
+                        in_channels=[256, 512, 1024], num_classes=80, strides=[8, 16, 32], student_device='cuda:0'):
         super(YoloXLoss, self).__init__()
         self.kd_loss = kd_loss
         
@@ -27,10 +29,15 @@ class YoloXLoss(nn.Module):
         self.temperature = temperature
         self.strides = strides
         self.grids = [torch.zeros(1)] * len(in_channels)
-
+        self.n_anchors = 1
+        self.num_classes = num_classes
+        self.student_device = student_device
 
         self.kd_cls_weight = kd_cls_weight
         self.kd_hint_weight = kd_hint_weight
+        self.pos_w = pos_cls_weight
+        self.neg_w = neg_cls_weight
+
 
     def forward(self, feat_maps, labels):
         if self.kd_loss:
@@ -50,6 +57,10 @@ class YoloXLoss(nn.Module):
             for (student_fmap_op, teacher_fmap_op) in zip(student_feat_map.values(), teacher_feat_map.values()):
                 student_reg_output, student_obj_output, student_cls_output = student_fmap_op
                 teacher_reg_output, teacher_obj_output, teacher_cls_output = teacher_fmap_op
+                
+                teacher_reg_output = teacher_reg_output.to(self.student_device)
+                teacher_obj_output = teacher_obj_output.to(self.student_device)
+                teacher_cls_output = teacher_cls_output.to(self.student_device)
 
                 loss_kd_hint += self.mse(student_reg_output, teacher_reg_output) + \
                                 self.mse(student_obj_output, teacher_obj_output) + \
@@ -428,3 +439,125 @@ class YoloXLoss(nn.Module):
             matched_gt_inds,
             num_fg,
         )
+
+
+    def get_in_boxes_info(
+        self,
+        gt_bboxes_per_image,
+        expanded_strides,
+        x_shifts,
+        y_shifts,
+        total_num_anchors,
+        num_gt,
+    ):
+        expanded_strides_per_image = expanded_strides[0]
+        x_shifts_per_image = x_shifts[0] * expanded_strides_per_image
+        y_shifts_per_image = y_shifts[0] * expanded_strides_per_image
+        x_centers_per_image = (
+            (x_shifts_per_image + 0.5 * expanded_strides_per_image)
+            .unsqueeze(0)
+            .repeat(num_gt, 1)
+        )  # [n_anchor] -> [n_gt, n_anchor]
+        y_centers_per_image = (
+            (y_shifts_per_image + 0.5 * expanded_strides_per_image)
+            .unsqueeze(0)
+            .repeat(num_gt, 1)
+        )
+
+        gt_bboxes_per_image_l = (
+            (gt_bboxes_per_image[:, 0] - 0.5 * gt_bboxes_per_image[:, 2])
+            .unsqueeze(1)
+            .repeat(1, total_num_anchors)
+        )
+        gt_bboxes_per_image_r = (
+            (gt_bboxes_per_image[:, 0] + 0.5 * gt_bboxes_per_image[:, 2])
+            .unsqueeze(1)
+            .repeat(1, total_num_anchors)
+        )
+        gt_bboxes_per_image_t = (
+            (gt_bboxes_per_image[:, 1] - 0.5 * gt_bboxes_per_image[:, 3])
+            .unsqueeze(1)
+            .repeat(1, total_num_anchors)
+        )
+        gt_bboxes_per_image_b = (
+            (gt_bboxes_per_image[:, 1] + 0.5 * gt_bboxes_per_image[:, 3])
+            .unsqueeze(1)
+            .repeat(1, total_num_anchors)
+        )
+
+        b_l = x_centers_per_image - gt_bboxes_per_image_l
+        b_r = gt_bboxes_per_image_r - x_centers_per_image
+        b_t = y_centers_per_image - gt_bboxes_per_image_t
+        b_b = gt_bboxes_per_image_b - y_centers_per_image
+        bbox_deltas = torch.stack([b_l, b_t, b_r, b_b], 2)
+
+        is_in_boxes = bbox_deltas.min(dim=-1).values > 0.0
+        is_in_boxes_all = is_in_boxes.sum(dim=0) > 0
+        # in fixed center
+
+        center_radius = 2.5
+
+        gt_bboxes_per_image_l = (gt_bboxes_per_image[:, 0]).unsqueeze(1).repeat(
+            1, total_num_anchors
+        ) - center_radius * expanded_strides_per_image.unsqueeze(0)
+        gt_bboxes_per_image_r = (gt_bboxes_per_image[:, 0]).unsqueeze(1).repeat(
+            1, total_num_anchors
+        ) + center_radius * expanded_strides_per_image.unsqueeze(0)
+        gt_bboxes_per_image_t = (gt_bboxes_per_image[:, 1]).unsqueeze(1).repeat(
+            1, total_num_anchors
+        ) - center_radius * expanded_strides_per_image.unsqueeze(0)
+        gt_bboxes_per_image_b = (gt_bboxes_per_image[:, 1]).unsqueeze(1).repeat(
+            1, total_num_anchors
+        ) + center_radius * expanded_strides_per_image.unsqueeze(0)
+
+        c_l = x_centers_per_image - gt_bboxes_per_image_l
+        c_r = gt_bboxes_per_image_r - x_centers_per_image
+        c_t = y_centers_per_image - gt_bboxes_per_image_t
+        c_b = gt_bboxes_per_image_b - y_centers_per_image
+        center_deltas = torch.stack([c_l, c_t, c_r, c_b], 2)
+        is_in_centers = center_deltas.min(dim=-1).values > 0.0
+        is_in_centers_all = is_in_centers.sum(dim=0) > 0
+
+        # in boxes and in centers
+        is_in_boxes_anchor = is_in_boxes_all | is_in_centers_all
+
+        is_in_boxes_and_center = (
+            is_in_boxes[:, is_in_boxes_anchor] & is_in_centers[:, is_in_boxes_anchor]
+        )
+        return is_in_boxes_anchor, is_in_boxes_and_center
+
+    def dynamic_k_matching(self, cost, pair_wise_ious, gt_classes, num_gt, fg_mask):
+        # Dynamic K
+        # ---------------------------------------------------------------
+        matching_matrix = torch.zeros_like(cost, dtype=torch.uint8)
+
+        ious_in_boxes_matrix = pair_wise_ious
+        n_candidate_k = min(10, ious_in_boxes_matrix.size(1))
+        topk_ious, _ = torch.topk(ious_in_boxes_matrix, n_candidate_k, dim=1)
+        dynamic_ks = torch.clamp(topk_ious.sum(1).int(), min=1)
+        dynamic_ks = dynamic_ks.tolist()
+        for gt_idx in range(num_gt):
+            _, pos_idx = torch.topk(
+                cost[gt_idx], k=dynamic_ks[gt_idx], largest=False
+            )
+            matching_matrix[gt_idx][pos_idx] = 1
+
+        del topk_ious, dynamic_ks, pos_idx
+
+        anchor_matching_gt = matching_matrix.sum(0)
+        if (anchor_matching_gt > 1).sum() > 0:
+            _, cost_argmin = torch.min(cost[:, anchor_matching_gt > 1], dim=0)
+            matching_matrix[:, anchor_matching_gt > 1] *= 0
+            matching_matrix[cost_argmin, anchor_matching_gt > 1] = 1
+        fg_mask_inboxes = matching_matrix.sum(0) > 0
+        num_fg = fg_mask_inboxes.sum().item()
+
+        fg_mask[fg_mask.clone()] = fg_mask_inboxes
+
+        matched_gt_inds = matching_matrix[:, fg_mask_inboxes].argmax(0)
+        gt_matched_classes = gt_classes[matched_gt_inds]
+
+        pred_ious_this_matching = (matching_matrix * pair_wise_ious).sum(0)[
+            fg_mask_inboxes
+        ]
+        return num_fg, gt_matched_classes, pred_ious_this_matching, matched_gt_inds

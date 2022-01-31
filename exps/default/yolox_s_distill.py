@@ -16,3 +16,5 @@ class Exp(MyExpDistill):
         self.temperature = 1.0
         self.kd_cls_weight = 0.5
         self.kd_hint_weight = 0.5
+        self.pos_cls_weight = 1.0
+        self.neg_cls_weight = 1.5

@@ -46,7 +46,8 @@ class Trainer:
         self.rank = get_rank()
         self.local_rank = get_local_rank()
         self.student_device = "cuda:{}".format(self.local_rank)
-        self.teacher_device = "cpu"
+        # self.teacher_device = "cpu"
+        self.teacher_device = self.student_device
         self.use_model_ema = student_exp.ema
 
         # data/dataloader related attr
@@ -74,7 +75,12 @@ class Trainer:
         self.yolox_loss = YoloXLoss(kd_loss=True, \
                             temperature=self.student_exp.temperature, \
                             kd_cls_weight=self.student_exp.kd_cls_weight, \
-                            kd_hint_weight=self.student_exp.kd_hint_weight)
+                            kd_hint_weight=self.student_exp.kd_hint_weight, \
+                            in_channels=self.student_exp.in_channels, \
+                            num_classes=self.student_exp.num_classes, \
+                            student_device=self.student_device, 
+                            pos_cls_weight=self.student_exp.pos_cls_weight, \
+                            neg_cls_weight=self.student_exp.neg_cls_weight)
 
     def train(self):
         self.before_train()
@@ -96,9 +102,6 @@ class Trainer:
             self.before_iter()
             self.train_one_iter()
             self.after_iter()
-
-            print("One iteration completed......")
-            exit()
 
     def train_one_iter(self):
         iter_start_time = time.time()
@@ -145,7 +148,7 @@ class Trainer:
         self.scaler.update()
 
         if self.use_model_ema:
-            self.ema_model.update(self.model)
+            self.ema_model.update(self.student_model)
 
         lr = self.lr_scheduler.update_lr(self.progress_in_iter + 1)
         for param_group in self.optimizer.param_groups:
@@ -244,9 +247,9 @@ class Trainer:
             self.train_loader.close_mosaic()
             logger.info("--->Add additional L1 loss now!")
             if self.is_distributed:
-                self.model.module.head.use_l1 = True
+                self.student_model.module.head.use_l1 = True
             else:
-                self.model.head.use_l1 = True
+                self.student_model.head.use_l1 = True
             self.student_exp.eval_interval = 1
             if not self.no_aug:
                 self.save_ckpt(ckpt_name="last_mosaic_epoch")
@@ -254,8 +257,8 @@ class Trainer:
     def after_epoch(self):
         self.save_ckpt(ckpt_name="latest")
 
-        if (self.epoch + 1) % self.exp.eval_interval == 0:
-            all_reduce_norm(self.model)
+        if (self.epoch + 1) % self.student_exp.eval_interval == 0:
+            all_reduce_norm(self.student_model)
             self.evaluate_and_save_model()
 
     def before_iter(self):
@@ -268,7 +271,7 @@ class Trainer:
             * reset setting of resize
         """
         # log needed information
-        if (self.iter + 1) % self.exp.print_interval == 0:
+        if (self.iter + 1) % self.student_exp.print_interval == 0:
             # TODO check ETA logic
             left_iters = self.max_iter * self.max_epoch - (self.progress_in_iter + 1)
             eta_seconds = self.meter["iter_time"].global_avg * left_iters
@@ -295,13 +298,13 @@ class Trainer:
                     loss_str,
                     self.meter["lr"].latest,
                 )
-                + (", size: {:d}, {}".format(self.input_size[0], eta_str))
+                + (", size: {:d}, {}".format(self.student_input_size[0], eta_str))
             )
             self.meter.clear_meters()
 
         # random resizing
         if (self.progress_in_iter + 1) % 10 == 0:
-            self.input_size = self.exp.random_resize(
+            self.student_input_size = self.student_exp.random_resize(
                 self.train_loader, self.epoch, self.rank, self.is_distributed
             )
 
@@ -360,14 +363,16 @@ class Trainer:
         if self.use_model_ema:
             evalmodel = self.ema_model.ema
         else:
-            evalmodel = self.model
+            evalmodel = self.student_model
             if is_parallel(evalmodel):
                 evalmodel = evalmodel.module
 
-        ap50_95, ap50, summary = self.exp.eval(
+        ap50_95, ap50, summary = self.student_exp.eval(
             evalmodel, self.evaluator, self.is_distributed
         )
-        self.model.train()
+        # Above function calls model.eval() internally.
+        # So to reset that we need to call model.train()
+        self.student_model.train()
         if self.rank == 0:
             self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)
             self.tblogger.add_scalar("val/COCOAP50_95", ap50_95, self.epoch + 1)
@@ -379,7 +384,7 @@ class Trainer:
 
     def save_ckpt(self, ckpt_name, update_best_ckpt=False):
         if self.rank == 0:
-            save_model = self.ema_model.ema if self.use_model_ema else self.model
+            save_model = self.ema_model.ema if self.use_model_ema else self.student_model
             logger.info("Save weights to {}".format(self.file_name))
             ckpt_state = {
                 "start_epoch": self.epoch + 1,

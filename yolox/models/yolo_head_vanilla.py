@@ -165,7 +165,7 @@ class YOLOXHead(nn.Module):
             reg_output = self.reg_preds[k](reg_feat)        # [B x 4 x h x w]
             obj_output = self.obj_preds[k](reg_feat)        # [B x 1 x h x w]
 
-            if self.training:
+            if not self.inference_only:
                 feature_map_output = [reg_output, obj_output, cls_output]
 
                 final_feature_maps[k] = feature_map_output
