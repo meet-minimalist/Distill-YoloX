@@ -1,4 +1,6 @@
 
+pip install -r requirements.txt
+
 mkdir ./pretrained_ckpt
 wget -c https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.pth -O ./pretrained_ckpt/yolox_s.pth
 wget -c https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_m.pth -O ./pretrained_ckpt/yolox_m.pth
