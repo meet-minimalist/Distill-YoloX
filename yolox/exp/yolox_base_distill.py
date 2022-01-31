@@ -34,7 +34,8 @@ class Exp(BaseExp):
         # You can uncomment this line to specify a multiscale range
         # self.random_size = (14, 26)
         # self.data_dir = None
-        self.data_dir = "M:/Datasets/COCO17/"
+        # self.data_dir = "M:/Datasets/COCO17/"
+        self.data_dir = "./datasets/COCO17/"
         # self.train_ann = "instances_train2017.json"
         self.train_ann = "instances_val2017.json"
         self.val_ann = "instances_val2017.json"
