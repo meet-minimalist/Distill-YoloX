@@ -22,7 +22,11 @@ import os
 import sys
 from unittest import mock
 from sphinx.domains import Domain
-from typing import Dict, List, Tuple
+import platform
+if platform.python_version() < 3.8:
+    from typing_extensions import Dict, List, TypeVarTuple
+else:
+    from typing import Dict, List, Tuple
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.

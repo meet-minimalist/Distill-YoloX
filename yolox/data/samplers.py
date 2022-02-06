@@ -3,7 +3,10 @@
 # Copyright (c) Megvii, Inc. and its affiliates.
 
 import itertools
-from typing import Optional
+if platform.python_version() < 3.8:
+    from typing_extensions import Optional
+else:
+    from typing import Optional
 
 import torch
 import torch.distributed as dist

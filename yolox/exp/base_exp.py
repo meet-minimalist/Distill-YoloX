@@ -5,7 +5,11 @@
 import ast
 import pprint
 from abc import ABCMeta, abstractmethod
-from typing import Dict
+if platform.python_version() < 3.8:
+    from typing_extensions import Dict
+else:
+    from typing import Dict
+
 from tabulate import tabulate
 
 import torch
