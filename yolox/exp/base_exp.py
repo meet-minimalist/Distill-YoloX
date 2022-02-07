@@ -5,10 +5,7 @@
 import ast
 import pprint
 from abc import ABCMeta, abstractmethod
-if platform.python_version() < 3.8:
-    from typing_extensions import Dict
-else:
-    from typing import Dict
+from typing import Dict
 
 from tabulate import tabulate
 

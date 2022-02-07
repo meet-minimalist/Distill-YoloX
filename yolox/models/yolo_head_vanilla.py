@@ -3,10 +3,7 @@
 # Copyright (c) 2014-2021 Megvii Inc. All rights reserved.
 
 import math
-if platform.python_version() < 3.8:
-    from typing_extensions import final
-else:
-    from typing import final
+from typing import final
 from loguru import logger
 
 import torch

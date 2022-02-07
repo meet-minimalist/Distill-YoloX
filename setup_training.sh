@@ -1,4 +1,5 @@
 
+
 pip install -r requirements.txt
 
 mkdir ./pretrained_ckpt
@@ -29,8 +30,5 @@ rm val2017.zip
 rm test2017.zip
 rm annotations_trainval2017.zip
 
-cd ../../
-
-sh command.sh
-
+cd ../
 
