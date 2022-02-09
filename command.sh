@@ -1,1 +1,1 @@
-/root/anaconda3/bin/python tools/train_distill.py --student-name yolox-s_distill --teacher-name yolox-l_distill --teacher-ckpt ./pretrained_ckpt/yolox_l.pth -d 0 -b 16 -o --fp16
+python tools/train_distill.py --student-name yolox-s_distill --teacher-name yolox-l_distill --teacher-ckpt ./pretrained_ckpt/yolox_l.pth -d 0 -b 16 -o --fp16
