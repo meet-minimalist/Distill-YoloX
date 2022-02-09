@@ -20,10 +20,10 @@ wget -c http://images.cocodataset.org/zips/val2017.zip
 wget -c http://images.cocodataset.org/zips/test2017.zip
 wget -c http://images.cocodataset.org/annotations/annotations_trainval2017.zip
 
-unzip train2017.zip
-unzip val2017.zip
-unzip test2017.zip
-unzip annotations_trainval2017.zip
+unzip train2017.zip -d ./COCO17
+unzip val2017.zip -d ./COCO17
+unzip test2017.zip -d ./COCO17
+unzip annotations_trainval2017.zip -d ./COCO17
 
 rm train2017.zip
 rm val2017.zip
