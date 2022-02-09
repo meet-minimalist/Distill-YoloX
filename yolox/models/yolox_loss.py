@@ -58,6 +58,7 @@ class YoloXLoss(nn.Module):
                 student_reg_output, student_obj_output, student_cls_output = student_fmap_op
                 teacher_reg_output, teacher_obj_output, teacher_cls_output = teacher_fmap_op
                 
+                # reg, obj, cls : [B x 4 x 20 x 20], [B x 1 x 20 x 20], [B x 80 x 20 x 20]
                 teacher_reg_output = teacher_reg_output.to(self.student_device)
                 teacher_obj_output = teacher_obj_output.to(self.student_device)
                 teacher_cls_output = teacher_cls_output.to(self.student_device)
@@ -144,13 +145,16 @@ class YoloXLoss(nn.Module):
         return loss_iou, loss_obj, loss_cls, loss_l1, num_fg
 
     def weighted_kl_div(self, ps, qt):
+        # ps, qt shape : [B, C, H, W]
         eps = 1e-10
         ps = ps + eps
         qt = qt + eps
         log_p = qt * torch.log(ps)
         log_p[:, 0] *= self.neg_w
         log_p[:, 1:] *= self.pos_w
-        return -torch.sum(log_p)
+
+        # return -torch.sum(log_p)
+        return torch.mean(-torch.sum(log_p, dim=1))
 
 
     def get_output_and_grid(self, output, k, stride, dtype):
