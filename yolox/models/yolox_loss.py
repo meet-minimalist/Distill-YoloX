@@ -37,6 +37,7 @@ class YoloXLoss(nn.Module):
         self.kd_hint_weight = kd_hint_weight
         self.pos_w = pos_cls_weight
         self.neg_w = neg_cls_weight
+        self.eps = 1e-3
 
 
     def forward(self, feat_maps, labels):
@@ -317,7 +318,7 @@ class YoloXLoss(nn.Module):
         ).sum() / num_fg
         loss_cls = (
             self.bcewithlog_loss(
-                cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets
+                cls_preds.view(-1, self.num_classes)[fg_masks] + self.eps, cls_targets
             )
         ).sum() / num_fg
         if self.use_l1:
