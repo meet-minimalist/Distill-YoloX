@@ -146,7 +146,7 @@ class YoloXLoss(nn.Module):
 
     def weighted_kl_div(self, ps, qt):
         # ps, qt shape : [B, C, H, W]
-        eps = 1e-10
+        eps = 1e-7
         ps = ps + eps
         qt = qt + eps
         log_p = qt * torch.log(ps)
