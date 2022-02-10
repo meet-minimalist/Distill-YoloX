@@ -37,7 +37,6 @@ class YoloXLoss(nn.Module):
         self.kd_hint_weight = kd_hint_weight
         self.pos_w = pos_cls_weight
         self.neg_w = neg_cls_weight
-        self.eps = 1e-7
 
 
     def forward(self, feat_maps, labels):
@@ -147,7 +146,7 @@ class YoloXLoss(nn.Module):
 
     def weighted_kl_div(self, ps, qt):
         # ps, qt shape : [B, C, H, W]
-        eps = 1e-7
+        eps = 1e-10
         ps = ps + eps
         qt = qt + eps
         log_p = qt * torch.log(ps)
