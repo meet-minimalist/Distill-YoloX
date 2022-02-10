@@ -317,7 +317,7 @@ class YoloXLoss(nn.Module):
         ).sum() / num_fg
         loss_cls = (
             self.bcewithlog_loss(
-                cls_preds.view(-1, self.num_classes)[fg_masks] + self.eps, cls_targets
+                cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets
             )
         ).sum() / num_fg
         if self.use_l1:
