@@ -37,7 +37,7 @@ class YoloXLoss(nn.Module):
         self.kd_hint_weight = kd_hint_weight
         self.pos_w = pos_cls_weight
         self.neg_w = neg_cls_weight
-        self.eps = 1e-3
+        self.eps = 1e-7
 
 
     def forward(self, feat_maps, labels):
