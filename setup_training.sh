@@ -13,7 +13,7 @@ wget -c https://storage.googleapis.com/coco-mintrain/annotations_trainval2017.zi
 wget -c https://storage.googleapis.com/coco-mintrain/minitrain2017.zip
 wget -c https://storage.googleapis.com/coco-mintrain/val2017.zip
 wget -c https://storage.googleapis.com/coco-mintrain/test2017.zip
-wget -c instances_minitrain2017.json
+wget -c https://storage.googleapis.com/coco-mintrain/instances_minitrain2017.json
 
 unzip minitrain2017.zip -d ./datasets/COCO17
 unzip val2017.zip -d ./datasets/COCO17
