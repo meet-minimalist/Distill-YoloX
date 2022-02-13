@@ -11,5 +11,5 @@ python tools/train_distill.py --student-name yolox-s_distill --teacher-name yolo
 python tools/train.py -n yolox-s -d 1 -b 32 --fp16 -o data_dir "./datasets/COCO17/" train_ann "instances_minitrain2017.json" max_epoch 60 output_dir "/content/drive/MyDrive/ThesisData/YoloXCheckpoints/"
 
 # Yolox-L
-python tools/train.py -n yolox-s -d 1 -b 16 --fp16 -o data_dir "./datasets/COCO17/" train_ann "instances_minitrain2017.json" max_epoch 60 output_dir "/content/drive/MyDrive/ThesisData/YoloXCheckpoints/"
+python tools/train.py -n yolox-l -d 1 -b 16 --fp16 -o data_dir "./datasets/COCO17/" train_ann "instances_minitrain2017.json" max_epoch 60 output_dir "/content/drive/MyDrive/ThesisData/YoloXCheckpoints/"
 
