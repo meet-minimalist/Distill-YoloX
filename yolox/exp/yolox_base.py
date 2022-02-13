@@ -33,12 +33,10 @@ class Exp(BaseExp):
         # You can uncomment this line to specify a multiscale range
         # self.random_size = (14, 26)
         # self.data_dir = None
-        self.data_dir = "M:/Datasets/COCO17/"
-        # self.train_ann = "instances_train2017.json"
-        self.train_ann = "instances_val2017.json"
+        self.data_dir = "./datasets/COCO17/"
+        self.train_ann = "instances_train2017.json"
         self.val_ann = "instances_val2017.json"
-        self.test_ann = "instances_val2017.json"
-        # self.test_ann = "instances_test2017.json"
+        self.test_ann = "instances_test2017.json"
 
         # --------------- transform config ----------------- #
         self.mosaic_prob = 1.0
@@ -66,6 +64,7 @@ class Exp(BaseExp):
         self.momentum = 0.9
         self.print_interval = 10
         self.eval_interval = 10
+        self.save_history_ckpt = True
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
         # -----------------  testing config ------------------ #
