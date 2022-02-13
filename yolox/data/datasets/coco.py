@@ -67,10 +67,7 @@ class COCODataset(Dataset):
         cats = self.coco.loadCats(self.coco.getCatIds())
         self._classes = tuple([c["name"] for c in cats])
         self.imgs = None
-        if 'val2017' in os.path.basename(json_file):
-            self.name = os.path.basename(json_file).split('_')[1].split('.')[0]
-        else:
-            self.name = name
+        self.name = os.path.basename(json_file).split('_')[1].split('.')[0]
         self.img_size = img_size
         self.preproc = preproc
         self.annotations = self._load_coco_annotations()
