@@ -1,5 +1,4 @@
 
-pip install -r requirements.txt
 
 mkdir ./pretrained_ckpt
 mkdir ./datasets
