@@ -246,6 +246,11 @@ class Trainer:
                 )
                 + (", size: {:d}, {}".format(self.input_size[0], eta_str))
             )
+            curr_steps = self.epoch * self.max_iter + self.iter + 1
+            for k, v in loss_meter.items():
+                self.tblogger.add_scalar(k, v.latest, curr_steps)
+            self.tblogger.add_scalar("lr", self.meter["lr"].latest, curr_steps)
+
             self.meter.clear_meters()
 
         # random resizing

@@ -49,6 +49,7 @@ class Trainer:
         # self.teacher_device = "cpu"
         self.teacher_device = self.student_device
         self.use_model_ema = student_exp.ema
+        self.save_history_ckpt = student_exp.save_history_ckpt
 
         # data/dataloader related attr
         self.data_type = torch.float16 if args.fp16 else torch.float32
@@ -136,7 +137,6 @@ class Trainer:
             "kd_hint_loss": loss_kd_hint,
             "num_fg": num_fg,
         }
-        # exit()
         
         loss = outputs["total_loss"]
 
@@ -227,7 +227,7 @@ class Trainer:
         )
         # Tensorboard logger
         if self.rank == 0:
-            self.tblogger = SummaryWriter(self.file_name)
+            self.tblogger = SummaryWriter(os.path.join(self.file_name, "tensorboard"))
 
         logger.info("Training start...")
         logger.info("\n{}".format(student_model))
@@ -298,6 +298,12 @@ class Trainer:
                 )
                 + (", size: {:d}, {}".format(self.student_input_size[0], eta_str))
             )
+
+            curr_steps = self.epoch * self.max_iter + self.iter + 1
+            for k, v in loss_meter.items():
+                self.tblogger.add_scalar(k, v.latest, curr_steps)
+            self.tblogger.add_scalar("lr", self.meter["lr"].latest, curr_steps)
+
             self.meter.clear_meters()
 
         # random resizing
@@ -331,6 +337,7 @@ class Trainer:
             # resume the model/optimizer state dict
             model.load_state_dict(ckpt["model"])
             self.optimizer.load_state_dict(ckpt["optimizer"])
+            self.best_ap = ckpt.pop("best_ap", 0)
             # resume the training states variables
             start_epoch = (
                 self.args.start_epoch - 1
@@ -370,6 +377,8 @@ class Trainer:
         )
         # Above function calls model.eval() internally.
         # So to reset that we need to call model.train()
+        update_best_ckpt = ap50_95 > self.best_ap
+        self.best_ap = max(self.best_ap, ap50_95)
         self.student_model.train()
         if self.rank == 0:
             self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)
@@ -377,8 +386,11 @@ class Trainer:
             logger.info("\n" + summary)
         synchronize()
 
-        self.save_ckpt("last_epoch", ap50_95 > self.best_ap)
-        self.best_ap = max(self.best_ap, ap50_95)
+        # self.save_ckpt("last_epoch", ap50_95 > self.best_ap)
+        # self.best_ap = max(self.best_ap, ap50_95)
+        self.save_ckpt("last_epoch", update_best_ckpt)
+        if self.save_history_ckpt:
+            self.save_ckpt(f"epoch_{self.epoch + 1}")
 
     def save_ckpt(self, ckpt_name, update_best_ckpt=False):
         if self.rank == 0:
@@ -388,6 +400,7 @@ class Trainer:
                 "start_epoch": self.epoch + 1,
                 "model": save_model.state_dict(),
                 "optimizer": self.optimizer.state_dict(),
+                "best_ap": self.best_ap,
             }
             save_checkpoint(
                 ckpt_state,
