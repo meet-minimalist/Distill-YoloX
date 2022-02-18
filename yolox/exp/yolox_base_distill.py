@@ -85,12 +85,18 @@ class Exp(BaseExp):
         if getattr(self, "model", None) is None:
             # in_channels = [256, 512, 1024]
             backbone = YOLOPAFPN(self.depth, self.width, in_channels=self.in_channels, act=self.act)
-            head = YOLOXHeadVanilla(self.num_classes, self.width, in_channels=self.in_channels, act=self.act, inference_only=False)
+            head = YOLOXHeadVanilla(self.num_classes, self.width, in_channels=self.in_channels, act=self.act)
             self.model = YOLOX_wo_Head(backbone, head)
 
         self.model.apply(init_yolo)
         self.model.head.initialize_biases(1e-2)
         return self.model
+
+
+    def get_yolox_loss(self):
+        from yolox.models import YoloXLoss
+        return YoloXLoss(self.in_channels, self.num_classes)
+
 
     def get_data_loader(
         self, batch_size, is_distributed, no_aug=False, cache_img=False

@@ -72,16 +72,18 @@ class Trainer:
             mode="a",
         )
 
-        from yolox.models import YoloXLoss
-        self.yolox_loss = YoloXLoss(kd_loss=True, \
+        self.yolox_loss = self.student_exp.get_yolox_loss()
+        
+        from yolox.models import KDLoss
+        self.kd_loss = KDLoss(
                             temperature=self.student_exp.temperature, \
                             kd_cls_weight=self.student_exp.kd_cls_weight, \
                             kd_hint_weight=self.student_exp.kd_hint_weight, \
-                            in_channels=self.student_exp.in_channels, \
-                            num_classes=self.student_exp.num_classes, \
-                            student_device=self.student_device, 
                             pos_cls_weight=self.student_exp.pos_cls_weight, \
-                            neg_cls_weight=self.student_exp.neg_cls_weight)
+                            neg_cls_weight=self.student_exp.neg_cls_weight, \
+                            student_device=self.student_device, \
+                            teacher_device=self.teacher_device)
+
 
     def train(self):
         self.before_train()
@@ -125,8 +127,15 @@ class Trainer:
         #     print(t.shape)
         #     print("==="*30)
 
-            loss_total, loss_iou, loss_obj, loss_cls, loss_cls_kd, loss_l1, loss_kd_hint, num_fg = \
-                self.yolox_loss([student_output_fmaps, teacher_output_fmaps], targets)
+        loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolox_loss(student_output_fmaps, targets)
+
+        loss_kd_softmax_temp, loss_kd_hint = self.kd_loss(student_output_fmaps, teacher_output_fmaps)
+
+        loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
+        loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
+
+        loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint
+
         outputs = {
             "total_loss": loss_total,
             "iou_loss": loss_iou,
@@ -245,9 +254,11 @@ class Trainer:
             self.train_loader.close_mosaic()
             logger.info("--->Add additional L1 loss now!")
             if self.is_distributed:
-                self.student_model.module.head.use_l1 = True
+                # self.student_model.module.head.use_l1 = True
+                self.yolox_loss.use_l1 = True
             else:
-                self.student_model.head.use_l1 = True
+                # self.student_model.head.use_l1 = True
+                self.yolox_loss.use_l1 = True
             self.student_exp.eval_interval = 1
             if not self.no_aug:
                 self.save_ckpt(ckpt_name="last_mosaic_epoch")

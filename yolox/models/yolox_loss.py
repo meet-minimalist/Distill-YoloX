@@ -12,11 +12,8 @@ from .losses import IOUloss
 
 
 class YoloXLoss(nn.Module):
-    def __init__(self, kd_loss=True, temperature=1.0, kd_cls_weight=0.5, kd_hint_weight=0.5, \
-                        pos_cls_weight=1.0, neg_cls_weight=1.5, \
-                        in_channels=[256, 512, 1024], num_classes=80, strides=[8, 16, 32], student_device='cuda:0'):
+    def __init__(self, in_channels=[256, 512, 1024], num_classes=80, strides=[8, 16, 32]):
         super(YoloXLoss, self).__init__()
-        self.kd_loss = kd_loss
         
         self.use_l1 = False
         # Note during training this will be set as True externally from trainer_distill.py file.
@@ -26,76 +23,21 @@ class YoloXLoss(nn.Module):
         self.iou_loss = IOUloss(reduction="none")
         self.mse = nn.MSELoss()
         self.softmax = nn.Softmax(dim=1)
-        self.temperature = temperature
         self.strides = strides
         self.grids = [torch.zeros(1)] * len(in_channels)
         self.n_anchors = 1
         self.num_classes = num_classes
-        self.student_device = student_device
-
-        self.kd_cls_weight = kd_cls_weight
-        self.kd_hint_weight = kd_hint_weight
-        self.pos_w = pos_cls_weight
-        self.neg_w = neg_cls_weight
 
 
-    def forward(self, feat_maps, labels):
-        if self.kd_loss:
-            student_feat_map, teacher_feat_map = feat_maps
-            # student_feat_map : a dict with key 0, 1, 2 and respective feat maps
-            # teacher_feat_map : a dict with key 0, 1, 2 and respective feat maps
+    def forward(self, model_feat_map, labels):
+        # model_feat_map : a dict with key 0, 1, 2 and respective feat maps
 
-            # 0 : [B x 4 x 80 x 80], [B x 1 x 80 x 80], [B x 80 x 80 x 80]
-            # 1 : [B x 4 x 40 x 40], [B x 1 x 40 x 40], [B x 80 x 40 x 40]
-            # 2 : [B x 4 x 20 x 20], [B x 1 x 20 x 20], [B x 80 x 20 x 20]
+        loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolo_loss(model_feat_map, labels)
 
+        reg_weight = 5.0
+        loss_iou = reg_weight * loss_iou
 
-            loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolo_loss(student_feat_map, labels)
-        
-            loss_kd_hint = 0
-            loss_kd_softmax_temp = 0
-            for (student_fmap_op, teacher_fmap_op) in zip(student_feat_map.values(), teacher_feat_map.values()):
-                student_reg_output, student_obj_output, student_cls_output = student_fmap_op
-                teacher_reg_output, teacher_obj_output, teacher_cls_output = teacher_fmap_op
-                
-                # reg, obj, cls : [B x 4 x 20 x 20], [B x 1 x 20 x 20], [B x 80 x 20 x 20]
-                teacher_reg_output = teacher_reg_output.to(self.student_device)
-                teacher_obj_output = teacher_obj_output.to(self.student_device)
-                teacher_cls_output = teacher_cls_output.to(self.student_device)
-
-                loss_kd_hint += self.mse(student_reg_output, teacher_reg_output) + \
-                                self.mse(student_obj_output, teacher_obj_output) + \
-                                self.mse(student_cls_output, teacher_cls_output)
-
-                conf = self.softmax(student_cls_output/self.temperature)
-                conf_k = self.softmax(teacher_cls_output/self.temperature)
-                loss_kd_softmax_temp += self.weighted_kl_div(conf, conf_k)
-                
-            loss_cls_kd = self.kd_cls_weight * loss_kd_softmax_temp
-            loss_cls = (1 - self.kd_cls_weight) * loss_cls
-            loss_cls_total = loss_cls + loss_cls_kd
-
-            reg_weight = 5.0
-            loss_iou = reg_weight * loss_iou
-
-            loss_kd_hint = loss_kd_hint * self.kd_hint_weight
-
-            loss_total = loss_iou + loss_obj + loss_cls_total + loss_l1 + loss_kd_hint
-
-
-        else:
-            model_feat_map = feat_maps[0]
-            # model_feat_map : a dict with key 0, 1, 2 and respective feat maps
-
-            loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolo_loss(model_feat_map, labels)
-
-            reg_weight = 5.0
-            loss_iou = reg_weight * loss_iou
-            loss_total = loss_iou + loss_obj + loss_cls + loss_l1
-            loss_cls_kd = 0.0
-            loss_kd_hint = 0.0
-
-        return loss_total, loss_iou, loss_obj, loss_cls, loss_cls_kd, loss_l1, loss_kd_hint, num_fg
+        return loss_iou, loss_obj, loss_cls, loss_l1, num_fg
             
 
     def yolo_loss(self, model_feat_map, labels):
@@ -143,19 +85,6 @@ class YoloXLoss(nn.Module):
         )
 
         return loss_iou, loss_obj, loss_cls, loss_l1, num_fg
-
-    def weighted_kl_div(self, ps, qt):
-        # ps, qt shape : [B, C, H, W]
-        eps = 1e-10
-        ps = ps + eps
-        qt = qt + eps
-        log_p = qt * torch.log(ps)
-        log_p[:, 0] *= self.neg_w
-        log_p[:, 1:] *= self.pos_w
-
-        # return -torch.sum(log_p)
-        return torch.mean(-torch.sum(log_p, dim=1))
-
 
     def get_output_and_grid(self, output, k, stride, dtype):
         grid = self.grids[k]
