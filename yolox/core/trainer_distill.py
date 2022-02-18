@@ -130,14 +130,14 @@ class Trainer:
         #     print(t.shape)
         #     print("==="*30)
 
-        loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolox_loss(student_output_fmaps, targets)
+            loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolox_loss(student_output_fmaps, targets)
 
-        loss_kd_softmax_temp, loss_kd_hint = self.kd_loss(student_output_fmaps, teacher_output_fmaps)
+            loss_kd_softmax_temp, loss_kd_hint = self.kd_loss(student_output_fmaps, teacher_output_fmaps)
 
-        loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
-        loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
+            loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
+            loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
 
-        loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint
+            loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint
 
         outputs = {
             "total_loss": loss_total,
