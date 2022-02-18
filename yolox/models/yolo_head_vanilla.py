@@ -128,6 +128,7 @@ class YOLOXHead(nn.Module):
         self.iou_loss = IOUloss(reduction="none")
         self.strides = strides
         self.grids = [torch.zeros(1)] * len(in_channels)
+        self.get_fmaps_only = False
 
     def initialize_biases(self, prior_prob):
         for conv in self.cls_preds:
@@ -162,7 +163,7 @@ class YOLOXHead(nn.Module):
             reg_output = self.reg_preds[k](reg_feat)        # [B x 4 x h x w]
             obj_output = self.obj_preds[k](reg_feat)        # [B x 1 x h x w]
 
-            if self.training:
+            if self.training or self.get_fmaps_only:
                 feature_map_output = [reg_output, obj_output, cls_output]
 
                 final_feature_maps[k] = feature_map_output
@@ -177,7 +178,7 @@ class YOLOXHead(nn.Module):
         # 2 : [B x 4 x 20 x 20], [B x 1 x 20 x 20], [B x 80 x 20 x 20]
 
 
-        if self.training:
+        if self.training or self.get_fmaps_only:
             return final_feature_maps
         else:
             self.hw = [x.shape[-2:] for x in final_feature_maps.values()]

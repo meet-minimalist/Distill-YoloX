@@ -120,7 +120,10 @@ class Trainer:
 
         with torch.cuda.amp.autocast(enabled=self.amp_training):
             student_output_fmaps = self.student_model(inps, targets)
+            old_val = self.teacher_model.head.get_fmaps_only
+            self.teacher_model.head.get_fmaps_only = True
             teacher_output_fmaps = self.teacher_model(inps, targets)
+            self.teacher_model.head.get_fmaps_only = old_val
 
         # for s, t in zip(student_output_fmaps, teacher_output_fmaps):
         #     print(s.shape)
