@@ -142,7 +142,9 @@ class ExpVOC(BaseExp):
         if is_distributed:
             batch_size = batch_size // dist.get_world_size()
 
-        sampler = InfiniteSampler(len(self.dataset), seed=self.seed if self.seed else 0)
+        sampler = InfiniteSampler(
+            len(self.dataset), seed=self.seed if self.seed else 0
+        )
 
         batch_sampler = YoloBatchSampler(
             sampler=sampler,
@@ -266,16 +268,15 @@ class ExpVOC(BaseExp):
         return val_loader
 
     def get_evaluator(self, batch_size, is_distributed, testdev=False, legacy=False):
-        from yolox.evaluators import COCOEvaluator
+        from yolox.evaluators import VOCEvaluator
 
         val_loader = self.get_eval_loader(batch_size, is_distributed, testdev, legacy)
-        evaluator = COCOEvaluator(
+        evaluator = VOCEvaluator(
             dataloader=val_loader,
             img_size=self.test_size,
             confthre=self.test_conf,
             nmsthre=self.nmsthre,
             num_classes=self.num_classes,
-            testdev=testdev,
         )
         return evaluator
 
