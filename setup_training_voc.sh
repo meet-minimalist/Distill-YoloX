@@ -18,10 +18,10 @@ tar -xvf VOCtrainval_11-May-2012.tar -C ./datasets/VOC0712
 tar -xvf VOCtrainval_06-Nov-2007.tar -C ./datasets/VOC0712
 tar -xvf VOCtest_06-Nov-2007.tar -C ./datasets/VOC0712
 
-mv ./datasets/VOC0712/VOC2012test/VOCdevkit/VOC2012 ./datasets/VOC0712/VOC2012/
-mv ./datasets/VOC0712/VOCtrainval_11-May-2012/VOCdevkit/VOC2012 ./datasets/VOC0712/VOC2012/
-mv ./datasets/VOC0712/VOCtrainval_06-Nov-2007/VOCdevkit/VOC2012 ./datasets/VOC0712/VOC2012/
-mv ./datasets/VOC0712/VOCtest_06-Nov-2007/VOCdevkit/VOC2012 ./datasets/VOC0712/VOC2012/
+mv ./datasets/VOC0712/VOCdevkit/VOC2012 ./datasets/VOC0712/VOC2012/
+mv ./datasets/VOC0712/VOCdevkit/VOC2007 ./datasets/VOC0712/VOC2007/
+
+rm -rf ./datasets/VOC0712/VOCdevkit/
 
 rm VOC2012test.tar
 rm VOCtrainval_11-May-2012.tar
