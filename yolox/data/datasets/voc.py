@@ -126,8 +126,6 @@ class VOCDetection(Dataset):
             for line in open(
                 os.path.join(rootpath, "ImageSets", "Main", name + ".txt")
             ):
-                # if not os.path.isfile(self._annopath % (rootpath, line.strip())):
-                #     continue
                 self.ids.append((rootpath, line.strip()))
 
         self.annotations = self._load_coco_annotations()
