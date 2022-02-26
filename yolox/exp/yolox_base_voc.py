@@ -244,7 +244,7 @@ class ExpVOC(BaseExp):
 
         valdataset = VOCDetection(
             data_dir=self.data_dir,
-            image_sets=[("2007", "test"), ("2012", "test")],
+            image_sets=[("2007", "test")],
             img_size=self.test_size,
             preproc=ValTransform(legacy=legacy),
         )

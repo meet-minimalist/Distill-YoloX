@@ -84,7 +84,7 @@ def voc_eval(
     # read list of images
     with open(imagesetfile, "r") as f:
         lines = f.readlines()
-    imagenames = [x.strip() for x in lines if os.path.isfile(annopath.format(x))]
+    imagenames = [x.strip() for x in lines]
 
     if not os.path.isfile(cachefile):
         # load annots
