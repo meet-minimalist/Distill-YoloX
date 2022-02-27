@@ -7,3 +7,4 @@ from .build import get_exp
 from .yolox_base import Exp
 from .yolox_base_voc import ExpVOC
 from .yolox_base_distill import Exp as ExpDistill
+from .yolox_base_distill_voc import ExpVOC as ExpVOCDistill
