@@ -13,7 +13,7 @@ class KDLoss(nn.Module):
                     teacher_device='cuda:0'):
         super(KDLoss, self).__init__()
 
-        self.mse = nn.MSELoss(reduction='none')
+        self.mse = nn.MSELoss()
         self.softmax = nn.Softmax(dim=1)
         self.temperature = temperature
         self.student_device = student_device
@@ -46,15 +46,9 @@ class KDLoss(nn.Module):
                 teacher_obj_output = teacher_obj_output.to(self.student_device)
                 teacher_cls_output = teacher_cls_output.to(self.student_device)
 
-            # TODO : Normalize each mse loss by feature-map height width then 
-            #      : take the sum across all the scales.
-            feat_h, feat_w = student_reg_output.shape[2:4]
-
-            normalized_hint_loss = torch.sum(self.mse(student_reg_output, teacher_reg_output) / (feat_h * feat_w), dim=[1, 2, 3]) + \
-                                   torch.sum(self.mse(student_obj_output, teacher_obj_output) / (feat_h * feat_w), dim=[1, 2, 3]) + \
-                                   torch.sum(self.mse(student_cls_output, teacher_cls_output) / (feat_h * feat_w), dim=[1, 2, 3])
-
-            loss_kd_hint += torch.mean(normalized_hint_loss)
+            loss_kd_hint += self.mse(student_reg_output, teacher_reg_output) + \
+                            self.mse(student_obj_output, teacher_obj_output) + \
+                            self.mse(student_cls_output, teacher_cls_output)
 
             conf = self.softmax(student_cls_output/self.temperature)
             conf_k = self.softmax(teacher_cls_output/self.temperature)
