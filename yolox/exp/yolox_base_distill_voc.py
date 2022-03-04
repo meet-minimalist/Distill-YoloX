@@ -18,10 +18,29 @@ class ExpVOC(BaseExp):
 
         # ---------------- model config ---------------- #
         self.num_classes = 20
+        self.has_background_class = False   
+        # If background class at index-0, used in computation of KL Divergence of class probabilities matching during KD Loss
         self.depth = 1.00
         self.width = 1.00
         self.act = 'silu'
         self.in_channels = [256, 512, 1024]
+
+        # ---------------- distaillation config ---------------- #
+        self.use_fpn_feats = False
+        # self.kd_loss_type = 'NORMAL'
+        self.kd_loss_type = 'RM_PGFI'
+        # ['NORMAL', 'RM_PGFI']
+        # Normal : L2 Loss between final prediction layers and Temperature softmax distribution matching using KL Div
+        # RM_PGFI : Normal loss + Rank minimization and Prediction Guided Feature Imitation
+        #         : Ref : https://arxiv.org/pdf/2112.04840.pdf
+        assert self.kd_loss_type in ['NORMAL', 'RM_PGFI']
+        if self.kd_loss_type == 'RM_PGFI':
+            self.use_fpn_feats = True
+            # self.pgfi_beta = 1.5
+            # self.rm_alpha = 4.0
+            self.pgfi_beta = 1.5 *100
+            self.rm_alpha = 4.0 * 10
+            # Values from "Overall loss function" section of the papers
 
         # ---------------- dataloader config ---------------- #
         # set worker to 4 for shorter dataloader init time
@@ -83,7 +102,7 @@ class ExpVOC(BaseExp):
             # in_channels = [256, 512, 1024]
             backbone = YOLOPAFPN(self.depth, self.width, in_channels=self.in_channels, act=self.act)
             head = YOLOXHeadVanilla(self.num_classes, self.width, in_channels=self.in_channels, act=self.act)
-            self.model = YOLOX_wo_Head(backbone, head)
+            self.model = YOLOX_wo_Head(backbone, head, return_backbone_feats=True if self.use_fpn_feats else False)
 
         self.model.apply(init_yolo)
         self.model.head.initialize_biases(1e-2)

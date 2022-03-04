@@ -74,15 +74,25 @@ class Trainer:
 
         self.yolox_loss = self.student_exp.get_yolox_loss()
         
-        from yolox.models import KDLoss
-        self.kd_loss = KDLoss(
-                            temperature=self.student_exp.temperature, \
-                            kd_cls_weight=self.student_exp.kd_cls_weight, \
-                            kd_hint_weight=self.student_exp.kd_hint_weight, \
-                            pos_cls_weight=self.student_exp.pos_cls_weight, \
-                            neg_cls_weight=self.student_exp.neg_cls_weight, \
-                            student_device=self.student_device, \
-                            teacher_device=self.teacher_device)
+        if self.student_exp.kd_loss_type == 'NORMAL':
+            from yolox.models import KDLoss
+            self.kd_loss = KDLoss(
+                                temperature=self.student_exp.temperature, \
+                                kd_cls_weight=self.student_exp.kd_cls_weight, \
+                                kd_hint_weight=self.student_exp.kd_hint_weight, \
+                                pos_cls_weight=self.student_exp.pos_cls_weight if self.student_exp.has_background_class else None, \
+                                neg_cls_weight=self.student_exp.neg_cls_weight if self.student_exp.has_background_class else None, \
+                                student_device=self.student_device, \
+                                teacher_device=self.teacher_device)
+        elif self.student_exp.kd_loss_type == 'RM_PGFI':
+            from yolox.models import KDLoss_RM_PGFI
+            self.kd_loss = KDLoss_RM_PGFI(
+                                student_channels=[int(s * self.student_exp.width) for s in self.student_exp.in_channels], \
+                                teacher_channels=[int(s * self.teacher_exp.width) for s in self.teacher_exp.in_channels], \
+                                student_device=self.student_device, \
+                                teacher_device=self.teacher_device, \
+                                in_channels=self.student_exp.in_channels, \
+                                num_classes=self.student_exp.num_classes)
 
 
     def train(self):
@@ -119,10 +129,16 @@ class Trainer:
         data_end_time = time.time()
 
         with torch.cuda.amp.autocast(enabled=self.amp_training):
-            student_output_fmaps = self.student_model(inps, targets)
+            if self.student_exp.use_fpn_feats:
+                student_output_fmaps, student_fpn_fmaps = self.student_model(inps, targets)
+            else:
+                student_output_fmaps = self.student_model(inps, targets)
             old_val = self.teacher_model.head.get_fmaps_only
             self.teacher_model.head.get_fmaps_only = True
-            teacher_output_fmaps = self.teacher_model(inps, targets)
+            if self.student_exp.use_fpn_feats:
+                teacher_output_fmaps, teacher_fpn_fmaps = self.teacher_model(inps, targets)
+            else:
+                teacher_output_fmaps = self.teacher_model(inps, targets)
             self.teacher_model.head.get_fmaps_only = old_val
 
         # for s, t in zip(student_output_fmaps, teacher_output_fmaps):
@@ -132,12 +148,27 @@ class Trainer:
 
             loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolox_loss(student_output_fmaps, targets)
 
-            loss_kd_softmax_temp, loss_kd_hint = self.kd_loss(student_output_fmaps, teacher_output_fmaps)
+            if self.student_exp.use_fpn_feats:
+                self.old_copy = list(self.kd_loss.parameters())[0].data
 
-            loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
-            loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
+                self.kd_loss.train()
+                loss_rm, loss_pgfi = self.kd_loss(student_output_fmaps, teacher_output_fmaps, \
+                                                    student_fpn_fmaps, teacher_fpn_fmaps, targets)
+                loss_rm = loss_rm * self.student_exp.rm_alpha
+                loss_pgfi = loss_pgfi * self.student_exp.pgfi_beta
+                
+                loss_cls_kd = 0
+                loss_kd_hint = 0
+            else:
+                loss_kd_softmax_temp, loss_kd_hint = self.kd_loss(student_output_fmaps, teacher_output_fmaps)
 
-            loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint
+                loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
+                loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
+
+                loss_rm = 0
+                loss_pgfi = 0
+
+            loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint + loss_rm + loss_pgfi
 
         outputs = {
             "total_loss": loss_total,
@@ -145,10 +176,15 @@ class Trainer:
             "l1_loss": loss_l1,
             "conf_loss": loss_obj,
             "cls_loss": loss_cls,
-            "kd_cls_loss": loss_cls_kd,
-            "kd_hint_loss": loss_kd_hint,
             "num_fg": num_fg,
         }
+
+        if self.student_exp.use_fpn_feats:
+            outputs['kd_loss_rm'] = loss_rm
+            outputs['kd_loss_pgfi'] = loss_pgfi
+        else:
+            outputs['kd_cls_loss'] = loss_cls_kd
+            outputs['kd_hint_loss'] = loss_kd_hint
         
         loss = outputs["total_loss"]
 
@@ -194,6 +230,14 @@ class Trainer:
 
         # solver related init
         self.optimizer = self.student_exp.get_optimizer(self.args.batch_size)
+
+        if self.student_exp.kd_loss_type == 'RM_PGFI':
+            import torch.nn as nn
+            pg_rm_pgfi = []
+            for k, v in self.kd_loss.named_modules():
+                if hasattr(v, "weight") and isinstance(v.weight, nn.Parameter):
+                    pg_rm_pgfi.append(v.weight)  # apply decay
+            self.optimizer.add_param_group({"params": pg_rm_pgfi})
 
         # Restore teacher checkpoint
         teacher_model = self.load_teacher(teacher_model)
@@ -242,7 +286,7 @@ class Trainer:
             self.tblogger = SummaryWriter(os.path.join(self.file_name, "tensorboard"))
 
         logger.info("Training start...")
-        logger.info("\n{}".format(student_model))
+        # logger.info("\n{}".format(student_model))
 
     def after_train(self):
         logger.info(

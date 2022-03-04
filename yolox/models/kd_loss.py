@@ -23,6 +23,9 @@ class KDLoss(nn.Module):
         self.kd_hint_weight = kd_hint_weight
         self.pos_w = pos_cls_weight
         self.neg_w = neg_cls_weight
+        if self.pos_w is None and self.neg_w is None:
+            # Dont use any weighing scheme.
+            self.use_background_weight = False
 
 
     def forward(self, student_feat_map, teacher_feat_map):
@@ -64,8 +67,9 @@ class KDLoss(nn.Module):
         ps = ps + eps
         qt = qt + eps
         log_p = qt * torch.log(ps)
-        log_p[:, 0] *= self.neg_w
-        log_p[:, 1:] *= self.pos_w
+        if self.use_background_weight:
+            log_p[:, 0] *= self.neg_w
+            log_p[:, 1:] *= self.pos_w
 
         # return -torch.sum(log_p)
         return torch.mean(-torch.sum(log_p, dim=1))

@@ -17,5 +17,6 @@ class Exp(MyExpVOCDistill):
         self.kd_cls_weight = 0.5
         # self.kd_hint_weight = 0.5
         self.kd_hint_weight = 0.05
-        self.pos_cls_weight = 1.0
-        self.neg_cls_weight = 1.5
+        if self.has_background_class:
+            self.pos_cls_weight = 1.0
+            self.neg_cls_weight = 1.5

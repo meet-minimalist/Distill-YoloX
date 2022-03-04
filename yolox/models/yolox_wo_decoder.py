@@ -16,7 +16,7 @@ class YOLOX(nn.Module):
     and detection results during test.
     """
 
-    def __init__(self, backbone=None, head=None):
+    def __init__(self, backbone=None, head=None, return_backbone_feats=False):
         super().__init__()
         if backbone is None:
             backbone = YOLOPAFPN()
@@ -25,6 +25,7 @@ class YOLOX(nn.Module):
 
         self.backbone = backbone
         self.head = head
+        self.return_backbone_feats = return_backbone_feats
 
     def forward(self, x, targets=None):
         # fpn output content features of [dark3, dark4, dark5]
@@ -34,7 +35,10 @@ class YOLOX(nn.Module):
         # fpn_outs[2] : [1, 512, 20, 20]
 
         final_feature_maps = self.head(fpn_outs)
-        return final_feature_maps
+        if self.return_backbone_feats:
+            return final_feature_maps, fpn_outs
+        else:
+            return final_feature_maps
         # return fpn_outs
         # if self.training:
         #     assert targets is not None

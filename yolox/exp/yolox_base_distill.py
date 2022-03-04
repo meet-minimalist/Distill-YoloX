@@ -18,6 +18,8 @@ class Exp(BaseExp):
 
         # ---------------- model config ---------------- #
         self.num_classes = 80
+        self.has_background_class = False   
+        # If background class at index-0, used in computation of KL Divergence of class probabilities matching during KD Loss
         self.depth = 1.00
         self.width = 1.00
         self.act = 'silu'

@@ -31,7 +31,7 @@ class YoloXLoss(nn.Module):
 
     def forward(self, model_feat_map, labels):
         # model_feat_map : a dict with key 0, 1, 2 and respective feat maps
-
+        # labels : [B x N x 5]
         loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolo_loss(model_feat_map, labels)
 
         reg_weight = 5.0
@@ -423,7 +423,6 @@ class YoloXLoss(nn.Module):
         b_t = y_centers_per_image - gt_bboxes_per_image_t
         b_b = gt_bboxes_per_image_b - y_centers_per_image
         bbox_deltas = torch.stack([b_l, b_t, b_r, b_b], 2)
-
         is_in_boxes = bbox_deltas.min(dim=-1).values > 0.0
         is_in_boxes_all = is_in_boxes.sum(dim=0) > 0
         # in fixed center
