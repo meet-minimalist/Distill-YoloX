@@ -74,9 +74,9 @@ class Trainer:
 
         self.yolox_loss = self.student_exp.get_yolox_loss()
         
-        if self.student_exp.kd_loss_type == 'NORMAL':
+        if self.student_exp.kd_loss_type == 'NORMAL' or self.student_exp.kd_loss_type == 'ALL':
             from yolox.models import KDLoss
-            self.kd_loss = KDLoss(
+            self.kd_loss_normal = KDLoss(
                                 temperature=self.student_exp.temperature, \
                                 kd_cls_weight=self.student_exp.kd_cls_weight, \
                                 kd_hint_weight=self.student_exp.kd_hint_weight, \
@@ -84,15 +84,21 @@ class Trainer:
                                 neg_cls_weight=self.student_exp.neg_cls_weight if self.student_exp.has_background_class else None, \
                                 student_device=self.student_device, \
                                 teacher_device=self.teacher_device)
-        elif self.student_exp.kd_loss_type == 'RM_PGFI':
+        if self.student_exp.kd_loss_type == 'RM_PGFI' or self.student_exp.kd_loss_type == 'ALL':
             from yolox.models import KDLoss_RM_PGFI
-            self.kd_loss = KDLoss_RM_PGFI(
+            self.kd_loss_rm_pgfi = KDLoss_RM_PGFI(
                                 student_channels=[int(s * self.student_exp.width) for s in self.student_exp.in_channels], \
                                 teacher_channels=[int(s * self.teacher_exp.width) for s in self.teacher_exp.in_channels], \
                                 student_device=self.student_device, \
                                 teacher_device=self.teacher_device, \
                                 in_channels=self.student_exp.in_channels, \
                                 num_classes=self.student_exp.num_classes)
+        if self.student_exp.kd_loss_type == 'SA' or self.student_exp.kd_loss_type == 'ALL':
+            # SA : Spatial affinity
+            from yolox.models import KDLoss_SA
+            self.kd_loss_sa = KDLoss_SA(
+                                student_device=self.student_device, \
+                                teacher_device=self.teacher_device)
 
 
     def train(self):
@@ -129,14 +135,18 @@ class Trainer:
         data_end_time = time.time()
 
         with torch.cuda.amp.autocast(enabled=self.amp_training):
-            if self.student_exp.use_fpn_feats:
-                student_output_fmaps, student_fpn_fmaps = self.student_model(inps, targets)
+            if self.student_exp.use_intermediate_feats:
+                student_output_fmaps, student_fpn_fmaps, student_backbone_fmaps = self.student_model(inps, targets)
+                # student_backbone_fmaps will have features from different layers and with following keys
+                # ["stem", "dark2", "dark3", "dark4", "dark5"]
             else:
                 student_output_fmaps = self.student_model(inps, targets)
             old_val = self.teacher_model.head.get_fmaps_only
             self.teacher_model.head.get_fmaps_only = True
-            if self.student_exp.use_fpn_feats:
-                teacher_output_fmaps, teacher_fpn_fmaps = self.teacher_model(inps, targets)
+            if self.student_exp.use_intermediate_feats:
+                teacher_output_fmaps, teacher_fpn_fmaps, teacher_backbone_fmaps = self.teacher_model(inps, targets)
+                # teacher_backbone_fmaps will have features from different layers and with following keys
+                # ["stem", "dark2", "dark3", "dark4", "dark5"]
             else:
                 teacher_output_fmaps = self.teacher_model(inps, targets)
             self.teacher_model.head.get_fmaps_only = old_val
@@ -148,27 +158,35 @@ class Trainer:
 
             loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolox_loss(student_output_fmaps, targets)
 
-            if self.student_exp.use_fpn_feats:
-                self.old_copy = list(self.kd_loss.parameters())[0].data
-
-                self.kd_loss.train()
-                loss_rm, loss_pgfi = self.kd_loss(student_output_fmaps, teacher_output_fmaps, \
+            # if self.student_exp.use_intermediate_feats:
+            if self.student_exp.kd_loss_type == 'RM_PGFI' or self.student_exp.kd_loss_type == 'ALL':
+                self.kd_loss_rm_pgfi.train()
+                loss_rm, loss_pgfi = self.kd_loss_rm_pgfi(student_output_fmaps, teacher_output_fmaps, \
                                                     student_fpn_fmaps, teacher_fpn_fmaps, targets)
                 loss_rm = loss_rm * self.student_exp.rm_alpha
                 loss_pgfi = loss_pgfi * self.student_exp.pgfi_beta
                 
+                loss_sa = 0
                 loss_cls_kd = 0
                 loss_kd_hint = 0
-            else:
-                loss_kd_softmax_temp, loss_kd_hint = self.kd_loss(student_output_fmaps, teacher_output_fmaps)
+            if self.student_exp.kd_loss_type == 'SA' or self.student_exp.kd_loss_type == 'ALL':
+                loss_sa = self.kd_loss_sa(student_backbone_fmaps, teacher_backbone_fmaps, student_fpn_fmaps, teacher_fpn_fmaps)
+
+                loss_rm = 0
+                loss_pgfi = 0
+                loss_cls_kd = 0
+                loss_kd_hint = 0
+            if self.student_exp.kd_loss_type == 'NORMAL' or self.student_exp.kd_loss_type == 'ALL':
+                loss_kd_softmax_temp, loss_kd_hint = self.kd_loss_normal(student_output_fmaps, teacher_output_fmaps)
 
                 loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
                 loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
 
                 loss_rm = 0
                 loss_pgfi = 0
+                loss_sa = 0
 
-            loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint + loss_rm + loss_pgfi
+            loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint + loss_rm + loss_pgfi + loss_sa
 
         outputs = {
             "total_loss": loss_total,
@@ -179,12 +197,14 @@ class Trainer:
             "num_fg": num_fg,
         }
 
-        if self.student_exp.use_fpn_feats:
-            outputs['kd_loss_rm'] = loss_rm
-            outputs['kd_loss_pgfi'] = loss_pgfi
-        else:
+        if self.student_exp.kd_loss_type == 'NORMAL' or self.student_exp.kd_loss_type == 'ALL':
             outputs['kd_cls_loss'] = loss_cls_kd
             outputs['kd_hint_loss'] = loss_kd_hint
+        if self.student_exp.kd_loss_type == 'RM_PGFI' or self.student_exp.kd_loss_type == 'ALL':
+            outputs['kd_loss_rm'] = loss_rm
+            outputs['kd_loss_pgfi'] = loss_pgfi
+        if self.student_exp.kd_loss_type == 'SA' or self.student_exp.kd_loss_type == 'ALL':
+            outputs['kd_loss_sa'] = loss_sa
         
         loss = outputs["total_loss"]
 

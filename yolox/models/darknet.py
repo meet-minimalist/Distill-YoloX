@@ -99,7 +99,7 @@ class CSPDarknet(nn.Module):
         self,
         dep_mul,
         wid_mul,
-        out_features=("dark3", "dark4", "dark5"),
+        out_features=("dark2", "dark3", "dark4", "dark5"),
         depthwise=False,
         act="silu",
     ):
