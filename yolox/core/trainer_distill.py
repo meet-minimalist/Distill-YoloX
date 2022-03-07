@@ -451,13 +451,13 @@ class Trainer:
             if is_parallel(evalmodel):
                 evalmodel = evalmodel.module
 
-        self.student_model.return_feats = False     # Setting this to false will return only final outputs
+        evalmodel.return_feats = False     # Setting this to false will return only final outputs
         ap50_95, ap50, summary = self.student_exp.eval(
             evalmodel, self.evaluator, self.is_distributed
         )
         # Above function calls model.eval() internally.
         # So to reset that we need to call model.train()
-        self.student_model.return_feats = True      # Need to reset this to True as during training it is required to output other feature maps as well.
+        evalmodel.return_feats = True      # Need to reset this to True as during training it is required to output other feature maps as well.
 
         update_best_ckpt = ap50_95 > self.best_ap
         self.best_ap = max(self.best_ap, ap50_95)
