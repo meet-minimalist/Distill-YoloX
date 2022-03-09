@@ -430,9 +430,12 @@ class Trainer:
             if is_parallel(evalmodel):
                 evalmodel = evalmodel.module
 
+        evalmodel.return_backbone_feats = False     # Setting this to false will return only final outputs
         ap50_95, ap50, summary = self.student_exp.eval(
             evalmodel, self.evaluator, self.is_distributed
         )
+        evalmodel.return_backbone_feats = True      # Need to reset this to True as during training it is required to output other feature maps as well.
+        
         # Above function calls model.eval() internally.
         # So to reset that we need to call model.train()
         update_best_ckpt = ap50_95 > self.best_ap
