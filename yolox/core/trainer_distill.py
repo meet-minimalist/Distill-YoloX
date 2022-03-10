@@ -149,13 +149,17 @@ class Trainer:
             loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolox_loss(student_output_fmaps, targets)
 
             if self.student_exp.use_fpn_feats:
-                self.old_copy = list(self.kd_loss.parameters())[0].data
-
                 self.kd_loss.train()
-                loss_rm, loss_pgfi = self.kd_loss(student_output_fmaps, teacher_output_fmaps, \
-                                                    student_fpn_fmaps, teacher_fpn_fmaps, targets)
-                loss_rm = loss_rm * self.student_exp.rm_alpha
-                loss_pgfi = loss_pgfi * self.student_exp.pgfi_beta
+                if self.epoch < self.student_exp.rm_pgfi_start_epoch:
+                    # Compute these loss once the model stabilize.
+                    # Otherwise it is throwing Cuda assert errors which are not understandable.
+                    loss_rm = 0
+                    loss_pgfi = 0
+                else:
+                    loss_rm, loss_pgfi = self.kd_loss(student_output_fmaps, teacher_output_fmaps, \
+                                                        student_fpn_fmaps, teacher_fpn_fmaps, targets)
+                    loss_rm = loss_rm * self.student_exp.rm_alpha
+                    loss_pgfi = loss_pgfi * self.student_exp.pgfi_beta
                 
                 loss_cls_kd = 0
                 loss_kd_hint = 0
@@ -435,7 +439,7 @@ class Trainer:
             evalmodel, self.evaluator, self.is_distributed
         )
         evalmodel.return_backbone_feats = True      # Need to reset this to True as during training it is required to output other feature maps as well.
-        
+
         # Above function calls model.eval() internally.
         # So to reset that we need to call model.train()
         update_best_ckpt = ap50_95 > self.best_ap
