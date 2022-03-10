@@ -38,8 +38,8 @@ class ExpVOC(BaseExp):
             self.use_fpn_feats = True
             # self.pgfi_beta = 1.5
             # self.rm_alpha = 4.0
-            self.pgfi_beta = 1.5 *100
-            self.rm_alpha = 4.0 * 10
+            self.pgfi_beta = 1.5 * 100
+            self.rm_alpha = 4.0 * 100
             self.rm_pgfi_start_epoch = 10
             # Values from "Overall loss function" section of the papers
 
