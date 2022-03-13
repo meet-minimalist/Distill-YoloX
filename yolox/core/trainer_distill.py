@@ -161,10 +161,16 @@ class Trainer:
             # if self.student_exp.use_intermediate_feats:
             if self.student_exp.kd_loss_type == 'RM_PGFI' or self.student_exp.kd_loss_type == 'ALL':
                 self.kd_loss_rm_pgfi.train()
-                loss_rm, loss_pgfi = self.kd_loss_rm_pgfi(student_output_fmaps, teacher_output_fmaps, \
-                                                    student_fpn_fmaps, teacher_fpn_fmaps, targets)
-                loss_rm = loss_rm * self.student_exp.rm_alpha
-                loss_pgfi = loss_pgfi * self.student_exp.pgfi_beta
+                if self.epoch < self.student_exp.rm_pgfi_start_epoch:
+                    # Compute these loss once the model stabilize.
+                    # Otherwise it is throwing Cuda assert errors which are not understandable.
+                    loss_rm = 0
+                    loss_pgfi = 0
+                else:
+                    loss_rm, loss_pgfi = self.kd_loss_rm_pgfi(student_output_fmaps, teacher_output_fmaps, \
+                                                        student_fpn_fmaps, teacher_fpn_fmaps, targets)
+                    loss_rm = loss_rm * self.student_exp.rm_alpha
+                    loss_pgfi = loss_pgfi * self.student_exp.pgfi_beta
                 
                 loss_sa = 0
                 loss_cls_kd = 0

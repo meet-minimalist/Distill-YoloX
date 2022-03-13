@@ -18,6 +18,7 @@ class KDLoss_RM_PGFI(nn.Module):
         self.mse_no_red = nn.MSELoss(reduction='none')
         self.softmax_d1 = nn.Softmax(dim=1)
         self.softmax_d0 = nn.Softmax(dim=0)
+        self.log_softmax_d0 = nn.LogSoftmax(dim=0)
         self.sigmoid = nn.Sigmoid()
         self.student_device = student_device
         self.teacher_device = teacher_device
@@ -222,12 +223,12 @@ class KDLoss_RM_PGFI(nn.Module):
                 # e.g. if 100 points are inside the current gt box then for those 100 points, we computed iou with label using predicted student and teacher coordinates.
                 te_iou_inside_gt_boxes = te_iou_map[label_id][label_mask]       # [n]   : n points inside gt boxes and each location will have iou value with that gt
 
+                st_iou_inside_gt_boxes_ls = self.log_softmax_d0(st_iou_inside_gt_boxes)
                 # Then apply softmax over all the softmaxed iou values of those 100 points 
-                st_iou_inside_gt_boxes = self.softmax_d0(st_iou_inside_gt_boxes)
+                # st_iou_inside_gt_boxes = self.softmax_d0(st_iou_inside_gt_boxes)
                 te_iou_inside_gt_boxes = self.softmax_d0(te_iou_inside_gt_boxes)
 
-                rm_loss_kl_div_per_gt = te_iou_inside_gt_boxes * torch.log(st_iou_inside_gt_boxes / (te_iou_inside_gt_boxes + 1e-10))
-                rm_loss_kl_div_per_gt = -torch.sum(rm_loss_kl_div_per_gt)
+                rm_loss_kl_div_per_gt = torch.nn.KLDivLoss(reduction='sum')(st_iou_inside_gt_boxes_ls, te_iou_inside_gt_boxes)
                 rm_loss_per_image += rm_loss_kl_div_per_gt
 
             rm_loss_per_image = rm_loss_per_image / num_gt

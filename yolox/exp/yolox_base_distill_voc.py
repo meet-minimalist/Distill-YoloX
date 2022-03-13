@@ -44,6 +44,7 @@ class ExpVOC(BaseExp):
             # Values from "Overall loss function" section of the papers
             self.pgfi_beta = 1.5 * 100
             self.rm_alpha = 4.0 * 10
+            self.rm_pgfi_start_epoch = 10
         if self.kd_loss_type == 'SA' or self.kd_loss_type == 'ALL':
             self.use_intermediate_feats = True
             self.sa_gamma = 1.0
