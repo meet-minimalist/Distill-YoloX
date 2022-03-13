@@ -28,7 +28,7 @@ class ExpVOC(BaseExp):
         # ---------------- distaillation config ---------------- #
         self.use_intermediate_feats = False
         # self.kd_loss_type = 'NORMAL'
-        self.kd_loss_type = 'SA'
+        self.kd_loss_type = 'ALL'
         # ['NORMAL', 'RM_PGFI', 'SA', 'ALL']
         # Normal : L2 Loss between final prediction layers and Temperature softmax distribution matching using KL Div
         # RM_PGFI : Normal loss + Rank minimization and Prediction Guided Feature Imitation
