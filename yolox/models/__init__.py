@@ -7,6 +7,7 @@ from .losses import IOUloss
 from .yolox_loss import YoloXLoss
 from .kd_loss import KDLoss
 from .kd_loss_rm_pgfi import KDLoss_RM_PGFI
+from .kd_loss_vanilla_v2 import KDLoss_Vanilla_v2
 from .kd_loss_sa import KDLoss_SA
 from .yolo_fpn import YOLOFPN
 from .yolo_head import YOLOXHead
