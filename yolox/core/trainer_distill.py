@@ -208,7 +208,7 @@ class Trainer:
                 loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
                 loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
 
-                loss_kd_hint = self.student_exp.kd_reg_weight * loss_kd_hint
+                loss_kd_hint = self.student_exp.kd_hint_weight * loss_kd_hint
 
 
             if self.student_exp.kd_loss_type == 'VANILLA_V2' or self.student_exp.kd_loss_type == 'ALL':
@@ -216,6 +216,7 @@ class Trainer:
 
                 loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
                 loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
+                loss_kd_reg = self.student_exp.kd_reg_weight * loss_kd_reg
 
 
             loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint + loss_rm + loss_pgfi + loss_sa + loss_kd_obj + loss_kd_reg
