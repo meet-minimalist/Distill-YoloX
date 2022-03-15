@@ -60,9 +60,9 @@ class KDLoss_Vanilla_v2(nn.Module):
         # Note : 2nd index is for classification logits. Sigmoid is not applied on this.
 
         
-        loss_kd_softmax_temp = self.__get_kd_softmax_loss()
-        loss_kd_reg = self.__get_kd_reg_loss()
-        loss_kd_obj = self.__get_kd_obj_loss()
+        loss_kd_softmax_temp = self.__get_kd_softmax_loss(student_feat_map, teacher_feat_map)
+        loss_kd_reg = self.__get_kd_reg_loss(student_feat_map, teacher_feat_map)
+        loss_kd_obj = self.__get_kd_obj_loss(student_feat_map, teacher_feat_map)
         return loss_kd_softmax_temp, loss_kd_obj, loss_kd_reg
 
 
