@@ -60,31 +60,61 @@ class KDLoss_Vanilla_v2(nn.Module):
         # Note : 2nd index is for classification logits. Sigmoid is not applied on this.
 
         
-        loss_kd_softmax_temp = 0
-        loss_kd_reg = 0
-        loss_kd_obj = 0
+        loss_kd_softmax_temp = self.__get_kd_softmax_loss()
+        loss_kd_reg = self.__get_kd_reg_loss()
+        loss_kd_obj = self.__get_kd_obj_loss()
+        return loss_kd_softmax_temp, loss_kd_obj, loss_kd_reg
 
+
+    def __get_kd_softmax_loss(self, student_feat_map, teacher_feat_map):
+        
+        loss_kd_softmax_temp = 0
+        for (k, (_, _, st_cls_output)), \
+            (_, (_, _, te_cls_output)) in \
+                zip(student_feat_map.items(), teacher_feat_map.items()):
+            # cls : [B x 80 x 20 x 20]
+            
+            if self.teacher_device != self.student_device:
+                te_cls_output = te_cls_output.to(self.student_device)
+
+            # Compute loss for classification task
+            conf_st = self.softmax_d1(st_cls_output/self.temperature)
+            conf_te = self.softmax_d1(te_cls_output/self.temperature)
+            loss_kd_softmax_temp += self.weighted_kl_div(conf_st, conf_te)
+
+        return loss_kd_softmax_temp
+
+
+    def __get_kd_obj_loss(self, student_feat_map, teacher_feat_map):
+
+        loss_kd_obj = 0
+        for (k, (_, st_obj_output, _)), \
+            (_, (_, te_obj_output, _)) in \
+                zip(student_feat_map.items(), teacher_feat_map.items()):
+            # obj : [B x 1 x 80 x 80]
+            
+            if self.teacher_device != self.student_device:
+                te_obj_output = te_obj_output.to(self.student_device)
+
+            # Compute loss for objectness matching
+            loss_kd_obj += torch.mean(self.bce_loss(st_obj_output, self.sigmoid(te_obj_output)))
+        
+        return loss_kd_obj
+
+
+
+    def __get_kd_reg_loss(self, student_feat_map, teacher_feat_map):
+
+        loss_kd_reg = 0
         for (k, (st_reg_output, st_obj_output, st_cls_output)), \
             (_, (te_reg_output, te_obj_output, te_cls_output)) in \
                 zip(student_feat_map.items(), teacher_feat_map.items()):
             # reg : [B x 4 x 80 x 80] 
             # obj : [B x 1 x 80 x 80]
-            # cls : [B x 80 x 20 x 20]
             
-            # Compute loss for classification task
             if self.teacher_device != self.student_device:
                 te_reg_output = te_reg_output.to(self.student_device)
                 te_obj_output = te_obj_output.to(self.student_device)
-                te_cls_output = te_cls_output.to(self.student_device)
-
-            conf_st = self.softmax_d1(st_cls_output/self.temperature)
-            conf_te = self.softmax_d1(te_cls_output/self.temperature)
-            loss_kd_softmax_temp += self.weighted_kl_div(conf_st, conf_te)
-
-
-            # Compute loss for objectness matching
-            loss_kd_obj += torch.mean(self.bce_loss(st_obj_output, self.sigmoid(te_obj_output)))
-
 
             # Compute loss for regression task
             stride_this_level = self.strides[k]
@@ -124,7 +154,7 @@ class KDLoss_Vanilla_v2(nn.Module):
             loss_kd_reg += torch.mean(torch.sum(loss_kd_reg_per_scale, dim=2))
 
 
-        return loss_kd_softmax_temp, loss_kd_obj, loss_kd_reg
+        return loss_kd_reg
         
         
 
