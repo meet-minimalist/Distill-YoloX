@@ -170,6 +170,18 @@ class Trainer:
 
             loss_iou, loss_obj, loss_cls, loss_l1, num_fg = self.yolox_loss(student_output_fmaps, targets)
 
+
+            loss_rm = 0
+            loss_pgfi = 0
+            loss_sa = 0
+
+            loss_kd_softmax_temp = 0
+            loss_kd_obj = 0
+            loss_kd_reg = 0
+
+            loss_cls_kd = 0
+            loss_kd_hint = 0
+
             # if self.student_exp.use_intermediate_feats:
             if self.student_exp.kd_loss_type == 'RM_PGFI' or self.student_exp.kd_loss_type == 'ALL':
                 self.kd_loss_rm_pgfi.train()
@@ -184,23 +196,11 @@ class Trainer:
                     loss_rm = loss_rm * self.student_exp.rm_alpha
                     loss_pgfi = loss_pgfi * self.student_exp.pgfi_beta
                 
-                if self.student_exp.kd_loss_type != 'ALL':
-                    loss_sa = 0
-                    loss_cls_kd = 0
-                    loss_kd_hint = 0
-                    loss_kd_reg = 0
 
             if self.student_exp.kd_loss_type == 'SA' or self.student_exp.kd_loss_type == 'ALL':
                 loss_sa = self.kd_loss_sa(student_backbone_fmaps, teacher_backbone_fmaps, student_fpn_fmaps, teacher_fpn_fmaps)
 
                 loss_sa = loss_sa * self.student_exp.sa_gamma
-
-                if self.student_exp.kd_loss_type != 'ALL':
-                    loss_rm = 0
-                    loss_pgfi = 0
-                    loss_cls_kd = 0
-                    loss_kd_hint = 0
-                    loss_kd_reg = 0
 
             if self.student_exp.kd_loss_type == 'NORMAL' or self.student_exp.kd_loss_type == 'ALL':
                 loss_kd_softmax_temp, loss_kd_hint = self.kd_loss_normal(student_output_fmaps, teacher_output_fmaps)
@@ -210,25 +210,15 @@ class Trainer:
 
                 loss_kd_hint = self.student_exp.kd_reg_weight * loss_kd_hint
 
-                if self.student_exp.kd_loss_type != 'ALL':
-                    loss_rm = 0
-                    loss_pgfi = 0
-                    loss_sa = 0
-                    loss_kd_reg = 0
 
             if self.student_exp.kd_loss_type == 'VANILLA_V2' or self.student_exp.kd_loss_type == 'ALL':
-                loss_kd_softmax_temp, loss_kd_reg = self.kd_loss_vanilla_v2(student_output_fmaps, teacher_output_fmaps, targets)
+                loss_kd_softmax_temp, loss_kd_obj, loss_kd_reg = self.kd_loss_vanilla_v2(student_output_fmaps, teacher_output_fmaps)
 
                 loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
                 loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
 
-                if self.student_exp.kd_loss_type != 'ALL':
-                    loss_rm = 0
-                    loss_pgfi = 0
-                    loss_sa = 0
-                    loss_kd_hint = 0
 
-            loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint + loss_rm + loss_pgfi + loss_sa + loss_kd_reg
+            loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint + loss_rm + loss_pgfi + loss_sa + loss_kd_obj + loss_kd_reg
 
         outputs = {
             "total_loss": loss_total,
@@ -244,6 +234,7 @@ class Trainer:
             outputs['kd_hint_loss'] = loss_kd_hint
         if self.student_exp.kd_loss_type == 'VANILLA_V2' or self.student_exp.kd_loss_type == 'ALL':
             outputs['kd_cls_loss'] = loss_cls_kd
+            outputs['kd_obj_loss'] = loss_kd_obj
             outputs['kd_reg_loss'] = loss_kd_reg
         if self.student_exp.kd_loss_type == 'RM_PGFI' or self.student_exp.kd_loss_type == 'ALL':
             outputs['kd_loss_rm'] = loss_rm

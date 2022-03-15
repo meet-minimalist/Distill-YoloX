@@ -27,7 +27,6 @@ class ExpVOC(BaseExp):
 
         # ---------------- distaillation config ---------------- #
         self.use_intermediate_feats = False
-        # self.kd_loss_type = 'NORMAL'
         self.kd_loss_type = 'VANILLA_V2'
         # ['NORMAL', 'VANILLA_V2', 'RM_PGFI', 'SA', 'ALL']
         # Normal (Vanilla) : L2 Loss between final prediction layers and Temperature softmax distribution matching using KL Div
@@ -60,7 +59,7 @@ class ExpVOC(BaseExp):
         if self.kd_loss_type == 'VANILLA_V2' or self.kd_loss_type == 'ALL':
             self.temperature = 1.0
             self.kd_cls_weight = 0.5
-            self.kd_reg_weight = 0.05
+            self.kd_reg_weight = 0.0005
             if self.has_background_class:
                 self.pos_cls_weight = 1.0
                 self.neg_cls_weight = 1.5

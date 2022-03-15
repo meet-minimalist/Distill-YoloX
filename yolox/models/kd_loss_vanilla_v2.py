@@ -17,6 +17,7 @@ class KDLoss_Vanilla_v2(nn.Module):
 
         self.mse_no_red = nn.MSELoss(reduction='none')
         self.softmax_d1 = nn.Softmax(dim=1)
+        self.bce_loss = nn.BCEWithLogitsLoss(reduction='none')
         self.sigmoid = nn.Sigmoid()
         self.student_device = student_device
         self.teacher_device = teacher_device
@@ -49,7 +50,7 @@ class KDLoss_Vanilla_v2(nn.Module):
         return torch.mean(-torch.sum(log_p, dim=1))
 
 
-    def forward(self, student_feat_map, teacher_feat_map, labels):
+    def forward(self, student_feat_map, teacher_feat_map):
         # student_feat_map : a dict with key 0, 1, 2 and respective feat maps
         # teacher_feat_map : a dict with key 0, 1, 2 and respective feat maps
 
@@ -58,45 +59,34 @@ class KDLoss_Vanilla_v2(nn.Module):
         # 2 : [B x 4 x 20 x 20], [B x 1 x 20 x 20], [B x 80 x 20 x 20]
         # Note : 2nd index is for classification logits. Sigmoid is not applied on this.
 
-        # labels : [B, N, 5]    : xywh format + cls-id
         
-        loss_kd_cls = self.__get_temp_kl_div(student_feat_map, teacher_feat_map)
-        loss_kd_reg = self.__get_kd_reg_loss(student_feat_map, teacher_feat_map, labels)
-
-        return loss_kd_cls, loss_kd_reg
-
-
-    def __get_temp_kl_div(self, student_feat_map, teacher_feat_map):
-        # student_feat_map : a dict with key 0, 1, 2 and respective feat maps
-        # teacher_feat_map : a dict with key 0, 1, 2 and respective feat maps
-
-        # 0 : [B x 4 x 80 x 80], [B x 1 x 80 x 80], [B x 80 x 80 x 80]
-        # 1 : [B x 4 x 40 x 40], [B x 1 x 40 x 40], [B x 80 x 40 x 40]
-        # 2 : [B x 4 x 20 x 20], [B x 1 x 20 x 20], [B x 80 x 20 x 20]
-
-
         loss_kd_softmax_temp = 0
-        for (student_fmap_op, teacher_fmap_op) in zip(student_feat_map.values(), teacher_feat_map.values()):
-            _, _, student_cls_output = student_fmap_op
-            _, _, teacher_cls_output = teacher_fmap_op
-            
-            # cls : [B x 80 x 20 x 20] : [N x C x H x W]
-            if self.teacher_device != self.student_device:
-                teacher_cls_output = teacher_cls_output.to(self.student_device)
+        loss_kd_reg = 0
+        loss_kd_obj = 0
 
-            conf = self.softmax_d1(student_cls_output/self.temperature)
-            conf_k = self.softmax_d1(teacher_cls_output/self.temperature)
-            loss_kd_softmax_temp += self.weighted_kl_div(conf, conf_k)
-
-        return loss_kd_softmax_temp
-
-
-    def __get_kd_reg_loss(self, student_feat_map, teacher_feat_map, labels):
-
-        loss_kd_reg_all_scales = []
         for (k, (st_reg_output, st_obj_output, st_cls_output)), \
             (_, (te_reg_output, te_obj_output, te_cls_output)) in \
-                zip(student_feat_map.items(), teacher_feat_map.items()):    
+                zip(student_feat_map.items(), teacher_feat_map.items()):
+            # reg : [B x 4 x 80 x 80] 
+            # obj : [B x 1 x 80 x 80]
+            # cls : [B x 80 x 20 x 20]
+            
+            # Compute loss for classification task
+            if self.teacher_device != self.student_device:
+                te_reg_output = te_reg_output.to(self.student_device)
+                te_obj_output = te_obj_output.to(self.student_device)
+                te_cls_output = te_cls_output.to(self.student_device)
+
+            conf_st = self.softmax_d1(st_cls_output/self.temperature)
+            conf_te = self.softmax_d1(te_cls_output/self.temperature)
+            loss_kd_softmax_temp += self.weighted_kl_div(conf_st, conf_te)
+
+
+            # Compute loss for objectness matching
+            loss_kd_obj += torch.mean(self.bce_loss(st_obj_output, self.sigmoid(te_obj_output)))
+
+
+            # Compute loss for regression task
             stride_this_level = self.strides[k]
             
             st_output = torch.cat([st_reg_output, st_obj_output, st_cls_output], 1)
@@ -128,16 +118,13 @@ class KDLoss_Vanilla_v2(nn.Module):
             te_obj_score = self.sigmoid(te_output[:, :, 4:5])
             # [B, num_anchors_per_scale, 1]
 
+            # Use teacher's objectness value as a mask to filter the regression loss calculation to only positive samples
             loss_kd_reg_per_scale = te_obj_score * self.mse_no_red(st_coords, te_coords)
             # [B, num_anchors_per_scale, 4]
-            loss_kd_reg_all_scales.append(loss_kd_reg_per_scale)
+            loss_kd_reg += torch.mean(torch.sum(loss_kd_reg_per_scale, dim=2))
 
 
-        loss_kd_reg_all_scales = torch.cat(loss_kd_reg_all_scales, dim=1)
-        # [B, total_anchors, 4]
-
-        loss_kd_reg = torch.mean(torch.sum(loss_kd_reg_all_scales, dim=2))
-        return loss_kd_reg
+        return loss_kd_softmax_temp, loss_kd_obj, loss_kd_reg
         
         
 
