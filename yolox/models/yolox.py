@@ -27,10 +27,13 @@ class YOLOX(nn.Module):
 
     def forward(self, x, targets=None):
         # fpn output content features of [dark3, dark4, dark5]
-        fpn_outs = self.backbone(x)
+        fpn_outs, intermediate_featmap_outs = self.backbone(x)
         # fpn_outs[0] : [1, 128, 80, 80]
         # fpn_outs[1] : [1, 256, 40, 40]
         # fpn_outs[2] : [1, 512, 20, 20]
+
+        # intermediate_featmap_outs will have features from different layers and with following keys
+        # ["stem", "dark2", "dark3", "dark4", "dark5"]
 
         if self.training:
             assert targets is not None
