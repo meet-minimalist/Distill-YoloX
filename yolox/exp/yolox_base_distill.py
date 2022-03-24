@@ -25,6 +25,48 @@ class Exp(BaseExp):
         self.act = 'silu'
         self.in_channels = [256, 512, 1024]
 
+
+        # ---------------- distaillation config ---------------- #
+        self.use_intermediate_feats = False
+        self.kd_loss_type = 'VANILLA_V2'
+        # ['NORMAL', 'VANILLA_V2', 'RM_PGFI', 'SA', 'ALL']
+        # Normal (Vanilla) : L2 Loss between final prediction layers and Temperature softmax distribution matching using KL Div
+        # VANILLA_V2 : Temparature Softmax distribution matching using KL Div - for classification, MSE loss for regression but with teacher's objectness masking - for regression
+        # RM_PGFI : Normal loss + Rank minimization and Prediction Guided Feature Imitation
+        #         : Ref : https://arxiv.org/pdf/2112.04840.pdf
+        # SA      : Spatial Affinity : Used gram matrix kind of concept but for spatial locations instead of channel wise locations
+        #         : Ref : https://ieeexplore.ieee.org/document/9190917, https://github.com/Vincent-Hoo/Knowledge-Distillation-for-Super-resolution
+        assert self.kd_loss_type in ['NORMAL', 'VANILLA_V2', 'RM_PGFI', 'SA', 'ALL']
+
+        if self.kd_loss_type == 'RM_PGFI' or self.kd_loss_type == 'ALL':
+            self.use_intermediate_feats = True
+            # self.pgfi_beta = 1.5
+            # self.rm_alpha = 4.0
+            # Values from "Overall loss function" section of the papers
+            self.pgfi_beta = 1.5 * 100
+            self.rm_alpha = 4.0 * 10
+            self.rm_pgfi_start_epoch = 10
+        if self.kd_loss_type == 'SA' or self.kd_loss_type == 'ALL':
+            self.use_intermediate_feats = True
+            self.sa_gamma = 1.0
+        if self.kd_loss_type == 'NORMAL' or self.kd_loss_type == 'ALL':
+            self.temperature = 1.0
+            self.kd_cls_weight = 0.5
+            # self.kd_hint_weight = 0.5
+            self.kd_hint_weight = 0.05
+            if self.has_background_class:
+                self.pos_cls_weight = 1.0
+                self.neg_cls_weight = 1.5
+        if self.kd_loss_type == 'VANILLA_V2' or self.kd_loss_type == 'ALL':
+            self.temperature = 1.0
+            self.kd_cls_weight = 0.5
+            self.kd_reg_weight = 0.005
+            if self.has_background_class:
+                self.pos_cls_weight = 1.0
+                self.neg_cls_weight = 1.5
+        
+
+
         # ---------------- dataloader config ---------------- #
         # set worker to 4 for shorter dataloader init time
         self.data_num_workers = 4
@@ -88,7 +130,7 @@ class Exp(BaseExp):
             # in_channels = [256, 512, 1024]
             backbone = YOLOPAFPN(self.depth, self.width, in_channels=self.in_channels, act=self.act)
             head = YOLOXHeadVanilla(self.num_classes, self.width, in_channels=self.in_channels, act=self.act)
-            self.model = YOLOX_wo_Head(backbone, head)
+            self.model = YOLOX_wo_Head(backbone, head, return_feats=True if self.use_intermediate_feats else False)
 
         self.model.apply(init_yolo)
         self.model.head.initialize_biases(1e-2)
