@@ -291,7 +291,7 @@ class Trainer:
         if self.student_exp.kd_loss_type == 'RM_PGFI':
             import torch.nn as nn
             pg_rm_pgfi = []
-            for k, v in self.kd_loss.named_modules():
+            for k, v in self.kd_loss_rm_pgfi.named_modules():
                 if hasattr(v, "weight") and isinstance(v.weight, nn.Parameter):
                     pg_rm_pgfi.append(v.weight)  # apply decay
             self.optimizer.add_param_group({"params": pg_rm_pgfi})

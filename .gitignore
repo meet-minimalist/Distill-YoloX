@@ -219,3 +219,8 @@ events.out.tfevents*
 
 # vim
 .vim
+
+
+# Commands
+command.bat
+command.sh
