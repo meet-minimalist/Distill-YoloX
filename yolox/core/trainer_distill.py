@@ -99,17 +99,17 @@ class Trainer:
             self.kd_loss_sa = KDLoss_SA(
                                 student_device=self.student_device, \
                                 teacher_device=self.teacher_device)
-        if self.student_exp.kd_loss_type == 'VANILLA_V2' or self.student_exp.kd_loss_type == 'ALL':
-            from yolox.models import KDLoss_Vanilla_v2
-            self.kd_loss_vanilla_v2 = KDLoss_Vanilla_v2(
-                                temperature=self.student_exp.temperature, \
-                                kd_cls_weight=self.student_exp.kd_cls_weight, \
-                                pos_cls_weight=self.student_exp.pos_cls_weight if self.student_exp.has_background_class else None, \
-                                neg_cls_weight=self.student_exp.neg_cls_weight if self.student_exp.has_background_class else None, \
-                                student_device=self.student_device, \
-                                teacher_device=self.teacher_device, \
-                                in_channels=self.student_exp.in_channels, \
-                                num_classes=self.student_exp.num_classes)
+        # if self.student_exp.kd_loss_type == 'VANILLA_V2' or self.student_exp.kd_loss_type == 'ALL':
+        #     from yolox.models import KDLoss_Vanilla_v2
+        #     self.kd_loss_vanilla_v2 = KDLoss_Vanilla_v2(
+        #                         temperature=self.student_exp.temperature, \
+        #                         kd_cls_weight=self.student_exp.kd_cls_weight, \
+        #                         pos_cls_weight=self.student_exp.pos_cls_weight if self.student_exp.has_background_class else None, \
+        #                         neg_cls_weight=self.student_exp.neg_cls_weight if self.student_exp.has_background_class else None, \
+        #                         student_device=self.student_device, \
+        #                         teacher_device=self.teacher_device, \
+        #                         in_channels=self.student_exp.in_channels, \
+        #                         num_classes=self.student_exp.num_classes)
 
 
 
@@ -211,12 +211,12 @@ class Trainer:
                 loss_kd_hint = self.student_exp.kd_hint_weight * loss_kd_hint
 
 
-            if self.student_exp.kd_loss_type == 'VANILLA_V2' or self.student_exp.kd_loss_type == 'ALL':
-                loss_kd_softmax_temp, loss_kd_obj, loss_kd_reg = self.kd_loss_vanilla_v2(student_output_fmaps, teacher_output_fmaps)
+            # if self.student_exp.kd_loss_type == 'VANILLA_V2' or self.student_exp.kd_loss_type == 'ALL':
+            #     loss_kd_softmax_temp, loss_kd_obj, loss_kd_reg = self.kd_loss_vanilla_v2(student_output_fmaps, teacher_output_fmaps)
 
-                loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
-                loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
-                loss_kd_reg = self.student_exp.kd_reg_weight * loss_kd_reg
+            #     loss_cls = (1 - self.student_exp.kd_cls_weight) * loss_cls
+            #     loss_cls_kd = self.student_exp.kd_cls_weight * loss_kd_softmax_temp
+            #     loss_kd_reg = self.student_exp.kd_reg_weight * loss_kd_reg
 
 
             loss_total = loss_iou + loss_obj + loss_cls + loss_cls_kd + loss_l1 + loss_kd_hint + loss_rm + loss_pgfi + loss_sa + loss_kd_obj + loss_kd_reg
@@ -233,10 +233,10 @@ class Trainer:
         if self.student_exp.kd_loss_type == 'NORMAL' or self.student_exp.kd_loss_type == 'ALL':
             outputs['kd_cls_loss'] = loss_cls_kd
             outputs['kd_hint_loss'] = loss_kd_hint
-        if self.student_exp.kd_loss_type == 'VANILLA_V2' or self.student_exp.kd_loss_type == 'ALL':
-            outputs['kd_cls_loss'] = loss_cls_kd
-            outputs['kd_obj_loss'] = loss_kd_obj
-            outputs['kd_reg_loss'] = loss_kd_reg
+        # if self.student_exp.kd_loss_type == 'VANILLA_V2' or self.student_exp.kd_loss_type == 'ALL':
+        #     outputs['kd_cls_loss'] = loss_cls_kd
+        #     outputs['kd_obj_loss'] = loss_kd_obj
+        #     outputs['kd_reg_loss'] = loss_kd_reg
         if self.student_exp.kd_loss_type == 'RM_PGFI' or self.student_exp.kd_loss_type == 'ALL':
             outputs['kd_loss_rm'] = loss_rm
             outputs['kd_loss_pgfi'] = loss_pgfi

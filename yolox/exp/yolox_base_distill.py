@@ -28,7 +28,7 @@ class Exp(BaseExp):
 
         # ---------------- distaillation config ---------------- #
         self.use_intermediate_feats = False
-        self.kd_loss_type = 'SA'
+        self.kd_loss_type = 'ALL'
         # ['NORMAL', 'VANILLA_V2', 'RM_PGFI', 'SA', 'ALL']
         # Normal (Vanilla) : L2 Loss between final prediction layers and Temperature softmax distribution matching using KL Div
         # VANILLA_V2 : Temparature Softmax distribution matching using KL Div - for classification, MSE loss for regression but with teacher's objectness masking - for regression
