@@ -1,6 +1,9 @@
 <div align="center"><img src="assets/logo.png" width="350"></div>
 <img src="assets/demo.png" >
 
+# Distil YoloX
+In this repo, we tried to use knowledge distillation techniques to improve the YoloX model. This work has been conducted as a part of final year thesis for my masters at Birla Institute of Technology and Science. The detailed report for the same can be found at: https://www.researchgate.net/publication/364096656
+
 ## Introduction
 YOLOX is an anchor-free version of YOLO, with a simpler design but better performance! It aims to bridge the gap between research and industrial communities.
 For more details, please refer to our [report on Arxiv](https://arxiv.org/abs/2107.08430).
